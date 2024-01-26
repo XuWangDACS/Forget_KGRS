@@ -22,6 +22,7 @@ pattern = re.compile(r"(\buser \d+|\bmovie \d+|\bcategory \d+|\bproducer \d+)( [
 
 # Function to extract entities and relations from each line
 def extract_from_line(line):
+    triples = []
     matches = pattern.findall(line)
     for i in range(len(matches) - 1):
         entity1, relation = matches[i]
@@ -31,15 +32,25 @@ def extract_from_line(line):
             domain_type = relation_domain_range_dict[relation.strip()][0]
             range_type = relation_domain_range_dict[relation.strip()][1]
             if entity1.startswith(domain_type) and entity2.startswith(range_type):
-                print(f"{entity1}\t{relation.strip()}\t{entity2}")
+                # print(f"{entity1}\t{relation.strip()}\t{entity2}")
+                subject = entity1.split(" ")[1]
+                object = entity2.split(" ")[1]
+                triples.append(f"{relation.strip()}({subject},{object})")
             else:
-                print(f"{entity2}\t{relation.strip()}\t{entity1}")
+                subject = entity2.split(" ")[1]
+                object = entity1.split(" ")[1]
+                # print(f"{entity2}\t{relation.strip()}\t{entity1}")
+                triples.append(f"{relation.strip()}({subject},{object})")
             # print(f"{entity1} {relation.strip()} {entity2}")
+    return triples
 
 # Process each line separately
 for index, row in file.iterrows():
     path = row['path']
-    extract_from_line(path)
-    # print("---- Next Line ----")  # Separator for clarity
+    body = extract_from_line(path)
+    rule = f"recommend({row['uid']},{row['rec item']}) <= {' & '.join(body)}"  # Join the body with spaces
+    print(path)
+    print(rule)
+    print("---- Next Line ----")  # Separator for clarity
 
-print(relations_set)
+# print(relations_set)
