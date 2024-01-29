@@ -12,13 +12,13 @@ relation_domain_range_dict = {
     'wrote_by': ('movie', 'writter'),
     'belong_to': ('movie', 'category'),
     'watched': ('user', 'movie'),
-    'produced_by_company': ('producer', 'company')
+    'produced_by_company': ('producer', 'production_company')
 }
 
 file = pd.read_csv('best_pred_paths.csv', delimiter=',',header = 0)
 
 # Regular expression to capture entities and any relations between them
-pattern = re.compile(r"(\buser \d+|\bmovie \d+|\bcategory \d+|\bproducer \d+)( [\w_]+)?")
+pattern = re.compile(r"(\buser \d+|\bmovie \d+|\bcategory \d+|\bproducer \d+|\bwritter \d+|\bactor \d+|\bdirector \d+|\beditor \d+|\bcinematographer \d+|\bproduction_company \d+)( [\w_]+)?")
 
 # Function to extract entities and relations from each line
 def extract_from_line(line):
