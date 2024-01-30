@@ -24,6 +24,7 @@ pattern = re.compile(r"(\buser \d+|\bmovie \d+|\bcategory \d+|\bproducer \d+|\bw
 def extract_from_line(line):
     triples_tsv = []
     triples = []
+    triple_path = set()
     matches = pattern.findall(line)
     for i in range(len(matches) - 1):
         entity1, relation = matches[i]
@@ -40,6 +41,8 @@ def extract_from_line(line):
                 object2 = entity2.split(" ")[1]
                 triples.append(f"{relation.strip()}({subject},{object})")
                 triples_tsv.append(f"{subject1}\t{subject2}\t{relation.strip()}\t{object1}\t{object2}")
+                triple_path.add(subject)
+                triple_path.add(object)
             else:
                 subject = entity2.split(" ")[0]+entity2.split(" ")[1]
                 subject1 = entity2.split(" ")[0]
@@ -49,30 +52,40 @@ def extract_from_line(line):
                 object2 = entity1.split(" ")[1]
                 triples.append(f"{relation.strip()}({subject},{object})")
                 triples_tsv.append(f"{subject1}\t{subject2}\t{relation.strip()}\t{object1}\t{object2}")
-    return triples,triples_tsv
+                triple_path.add(subject)
+                triple_path.add(object)
+    return triples,triples_tsv, triple_path
 
 file1 = pd.read_csv('pre_data/uid_pid_explanation_exp1.csv', delimiter=',',header = 0)
 # Process each line separately
 for index, row in file1.iterrows():
     path = row['path']
-    body,body_tsv = extract_from_line(path)
+    body,body_tsv, tpath = extract_from_line(path)
     body_t = '\t'.join(body_tsv)
     rule_tsv = f"user\t{row['uid']}\trecommend\tmovie\t{row['pid']}\t<=\t{body_t}"  # Join the body with spaces
     rule = f"recommend(user{row['uid']},movie{row['pid']}) <= {' & '.join(body)}"  # Join the body with spaces
+    tpath = '\t'.join(tpath)
+    rule_path = f"user{row['uid']}\tmovie{row['pid']}\t{tpath}"
     with open("exp_data/rules_exp1.txt", "a+") as f:
         f.write(rule + "\n")
     with open("exp_data/rules_exp1.tsv", "a+") as f:
         f.write(rule_tsv + "\n")
+    with open("exp_data/paths_exp1.txt", "a+") as f:
+        f.write(rule_path + "\n")
         
 file2 = pd.read_csv('pre_data/uid_pid_explanation_exp2.csv', delimiter=',',header = 0)
 # Process each line separately
 for index, row in file1.iterrows():
     path = row['path']
-    body,body_tsv = extract_from_line(path)
+    body,body_tsv,tpath = extract_from_line(path)
     body_t = '\t'.join(body_tsv)
     rule_tsv = f"user\t{row['uid']}\trecommend\tmovie\t{row['pid']}\t<=\t{body_t}"  # Join the body with spaces
     rule = f"recommend(user{row['uid']},movie{row['pid']}) <= {' & '.join(body)}"  # Join the body with spaces
+    tpath = '\t'.join(tpath)
+    rule_path = f"user{row['uid']}\tmovie{row['pid']}\t{tpath}"
     with open("exp_data/rules_exp2.txt", "a+") as f:
         f.write(rule + "\n")
     with open("exp_data/rules_exp2.tsv", "a+") as f:
         f.write(rule_tsv + "\n")
+    with open("exp_data/paths_exp2.txt", "a+") as f:
+        f.write(rule_path + "\n")

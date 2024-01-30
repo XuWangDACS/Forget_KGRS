@@ -1,14 +1,7 @@
+import rdflib
 import pandas as pd
-import re
-from collections import defaultdict
 
-graph = defaultdict(list)
+g = rdflib.Graph()
+g.parse("exp_data/KnowlegeGraph.ttl", format="turtle")
 
-pattern = re.compile(r"(user \d+|movie \d+|category \d+)( watched| belong_to)?")
-
-
-file = pd.read_csv('best_pred_paths.csv', delimiter=',',header = 0)
-
-for index, row in file.iterrows():
-    path = row['path']
-    print(path.replace("\t","\\t"))
+g.serialize(destination='exp_data/KnowlegeGraph.nt', format='nt')

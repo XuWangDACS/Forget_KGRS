@@ -7,9 +7,7 @@ g.parse("exp_data/KnowlegeGraph.ttl", format="turtle")
 # Construct query based on rule: recommend(A, B) <= watched(A, C) & cinematography(C, D) & cinematography(B, D)
 query1 = """
 prefix ex: <http://example.org/>
-construct {
-    ?A ex:recommend ?B .
-}
+SELECT ?A ?B
 where {
     ?A ex:watched ?C .
     ?C ex:cinematography ?D .
@@ -20,9 +18,7 @@ where {
 # rule: recommend(A, B) <= watched(A, C) & produced_by_company(C, D) & produced_by_company(B, D)
 query2 = """
 prefix ex: <http://example.org/>
-construct {
-    ?A ex:recommend ?B .
-}
+SELECT ?A ?B
 where {
     ?A ex:watched ?C .
     ?C ex:produced_by_company ?D .
@@ -33,9 +29,7 @@ where {
 # rule: recommend(A, B) <= watched(A, C) & belong_to(C, D) & belong_to(B, D)
 query3 = """
 prefix ex: <http://example.org/>
-construct {
-    ?A ex:recommend ?B .
-}
+SELECT ?A ?B
 where {
     ?A ex:watched ?C .
     ?C ex:belong_to ?D .
@@ -46,9 +40,7 @@ where {
 # rule: recommend(A, B) <= watched(A, C) & starring(C, D) & starring(B, D)
 query4 = """
 prefix ex: <http://example.org/>
-construct {
-    ?A ex:recommend ?B .
-}
+SELECT ?A ?B
 where {
     ?A ex:watched ?C .
     ?C ex:starring ?D .
@@ -59,9 +51,7 @@ where {
 # rule: recommend(A, B) <= watched(A, C) & edited_by(C, D) & edited_by(B, D)
 query5 = """
 prefix ex: <http://example.org/>
-construct {
-    ?A ex:recommend ?B .
-}
+SELECT ?A ?B
 where {
     ?A ex:watched ?C .
     ?C ex:edited_by ?D .
@@ -72,9 +62,7 @@ where {
 # rule: recommend(A, B) <= watched(A, C) & produced_by_producer(C, D) & produced_by_producer(B, D)
 query6 = """
 prefix ex: <http://example.org/>
-construct {
-    ?A ex:recommend ?B .
-}
+SELECT ?A ?B
 where {
     ?A ex:watched ?C .
     ?C ex:produced_by_producer ?D .
@@ -85,9 +73,7 @@ where {
 # rule: recommend(A, B) <= watched(A, C) & wrote_by(C, D) & wrote_by(B, D)
 query7 = """
 prefix ex: <http://example.org/>
-construct {
-    ?A ex:recommend ?B .
-}
+SELECT ?A ?B
 where {
     ?A ex:watched ?C .
     ?C ex:wrote_by ?D .
@@ -98,9 +84,7 @@ where {
 # rule: recommend(A, B) <= watched(A, C) & directed_by(C, D) & directed_by(B, D)
 query8 = """
 prefix ex: <http://example.org/>
-construct {
-    ?A ex:recommend ?B .
-}
+SELECT ?A ?B
 where {
     ?A ex:watched ?C .
     ?C ex:directed_by ?D .
@@ -111,9 +95,7 @@ where {
 # rule: recommend(A, B) <= watched(A, C) & watched(D, C) & watched(D, B)
 query9 = """
 prefix ex: <http://example.org/>
-construct {
-    ?A ex:recommend ?B .
-}
+SELECT ?A ?B
 where {
     ?A ex:watched ?C .
     ?D ex:watched ?C .
@@ -123,7 +105,7 @@ where {
 
 # Print results
 for result in g.query(query1):
-    print(result[0], " -> ",result[1])
+    print(result)
 # for result in g.query(query2):
 #     print(result[0], " -> ",result[1])
 # for result in g.query(query3):
