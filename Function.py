@@ -30,7 +30,7 @@ def RBS(G, target, alpha, theta, lambda_function):
 
     # Sum up estimates from all levels for each node
     final_estimates = np.sum(estimates, axis=0)
-    return dict(zip(V, final_estimates))
+    return {key: value for key, value in dict(zip(V, final_estimates)).items() if value != 0}
 
 def RBS_optimized(G, target, alpha, theta, lambda_function):
     V = list(G.nodes())
