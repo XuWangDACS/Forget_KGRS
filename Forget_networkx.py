@@ -12,7 +12,7 @@ from Function import RBS, RBS_optimized
 #     o = str(row[3])+str(row[4])
 #     G.add_edge(s, o)
 
-def measure_impact_wsc(G:nx.Graph(), path:str, forget_source:str, forget_target:str, alpha=0.15, theta=0.1, lambda_function=lambda u: G.degree(u)):
+def measure_impact_wsc(G:nx.Graph(), path:str, forget_source:str, forget_target:str, alpha=0.15, theta=0.1):
     """Measure the impact of a path on the PPR estimates of a target node
     G: Graph (DiGraph or Graph in nx)
     path: Path
@@ -24,7 +24,7 @@ def measure_impact_wsc(G:nx.Graph(), path:str, forget_source:str, forget_target:
     
     Returns: Impact score
     """
-    
+    lambda_function=lambda u: G.degree(u)
     if not G.has_edge(forget_source, forget_target):
         return 0
     
