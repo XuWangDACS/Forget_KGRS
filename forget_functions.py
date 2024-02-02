@@ -1,8 +1,34 @@
 from rdflib import Graph, Namespace
 from rdflib_hdt import HDTStore, optimize_sparql, HDTDocument
+import pandas as pd
 import numpy as np
 import networkx as nx
 import random
+import os
+from extract_rules_from_paths import extract_from_line
+
+
+def parse_rules(rule_path:str):
+    assert os.path.isfile(rule_path), f"{rule_path} is not a valid file path"
+    file = pd.read_csv(rule_path, header=None,  delimiter=',')
+    rule_list = []
+    for _, row in file.iterrows():
+        path = row['path']
+        body,body_tsv, tpath = extract_from_line(path)
+        rule = f"recommend(user{row['uid']},movie{row['pid']}) <= {' & '.join(body)}"
+        rule_list.append(rule)
+    return rule_list
+
+def build_pforget_search_space(forget_rules:list):
+    search_space = set()
+    for rule in forget_rules:
+        head = rule.split(" <= ")[0]
+        body = rule.split(" <= ")[1]
+        body_atoms = body.split(" & ")
+        for atom in body_atoms:
+            s, p, o = get_s_p_o(atom)
+            search_space.add((s,p,o))
+    return search_space
 
 def check_exist_triple(document: HDTDocument, s, p ,o):
     ex = Namespace("http://example.org/")
@@ -36,68 +62,8 @@ def check_ground_rule_satisfy(document: HDTDocument, rule):
             return False
     return True
 
-def measure_impact_wsc(G:nx.Graph(), path:str, forget_source:str, forget_target:str, alpha=0.15, theta=0.1):
-    """Measure the impact of a path on the PPR estimates of a target node
-    G: Graph (DiGraph or Graph in nx)
-    path: Path
-    forget_source: Source node
-    forget_target: Target node
-    alpha: Teleport probability
-    theta: Error parameter
-    
-    Returns: Impact score
-    """
-    lambda_function=lambda u: G.degree(u)
-    if not G.has_edge(forget_source, forget_target):
-        return 0
-    
-    split_path = path.split("\t")
-    source = split_path[0]
-    target = split_path[1]
-    all_paths = nx.all_simple_paths(G, source, target, cutoff=3)
-    optimized_dict = RBS_optimized(G, target, alpha, theta, lambda_function)
-    G.remove_edge(forget_source, forget_target)
-    optimized_dict_forget = RBS_optimized(G, target, alpha, theta, lambda_function)
-    G.add_edge(forget_source, forget_target)
-    
-    path_score_dict = {}
-    path_score_dict_forget = {}
-
-    for path in all_paths:
-        path_score = 0
-        path_score_forget = 0
-        for node in path:
-            if node in optimized_dict:
-                path_score += optimized_dict[node]
-            if node in optimized_dict_forget:
-                path_score_forget += optimized_dict_forget[node]
-        path_score_dict[str(path)] = path_score
-        path_score_dict_forget[str(path)] = path_score_forget
-    
-    sorted_dict = sorted(path_score_dict.items(), key=lambda x: x[1], reverse=True)
-    max_path_score = sorted_dict[0][1]
-    min_path_score = sorted_dict[-1][1]
-    
-    sorted_dict_forget = sorted(path_score_dict_forget.items(), key=lambda x: x[1], reverse=True)
-    max_path_score_forget = sorted_dict_forget[0][1]
-    min_path_score_forget = sorted_dict_forget[-1][1]
-    
-    given_path_nodes = path.split("\t")[2:]
-    given_path_score = 0
-    given_path_score_forget = 0
-    
-    for node in given_path_nodes:
-        if node in optimized_dict:
-            given_path_score += optimized_dict[node]
-        if node in optimized_dict_forget:
-            given_path_score_forget += optimized_dict_forget[node]
-    
-    normalized_score = abs(given_path_score - min_path_score) / abs(max_path_score - min_path_score)
-    normalized_score_forget = abs(given_path_score_forget - min_path_score_forget) / abs(max_path_score_forget - min_path_score_forget)
-    impact_score = normalized_score_forget - normalized_score
-    return impact_score
-
-def RBS_optimized(G, target, alpha, theta, lambda_function):
+def RBS_optimized(G, target, alpha=0.15, theta=0.1):
+    lambda_function = lambda u: G.degree(u)
     V = list(G.nodes())
     node_index = {node: idx for idx, node in enumerate(V)}  # Cache node indices
     L = int(np.log(1/theta) / np.log(1/alpha))
@@ -196,8 +162,94 @@ def check_least_model(rule_list:list, least_model:set):
         if head not in least_model or not least_model.issuperset(set(body_atoms)):
             return False
     return True
+        
+def get_predicate_degree_centrality(hdt:HDTDocument, forget_triples:list = []):
+    DiG = nx.DiGraph()
+    predicate_set = set()
+    triples, _ = hdt.search((None, None, None))
+    for s, p, o in triples:
+        sub = str(s).replace("http://example.org/","")
+        pre = str(p).replace("http://example.org/","")
+        obj = str(o).replace("http://example.org/","")
+        if (sub,pre,obj) in forget_triples:
+            continue
+        predicate_set.add(pre)
+        DiG.add_edge(sub,pre)
+        DiG.add_edge(pre,obj)
+    degree_centrality = nx.degree_centrality(DiG)
+    predicate_degree_centrality = {node: centrality for node, centrality in degree_centrality.items() if node in predicate_set}
+    return predicate_degree_centrality
 
-def get_low_impact_WSC(G:nx.Graph(), path_list:list, targets, alpha=0.15, theta=0.1, impact_threshold = 0.0):
-    low_impact_atoms = set()
-    if impact_threshold >= 0:
-        low_impact_atoms.update(zero_RBS_for_all_targets(G, targets, alpha, theta))
+def get_entity_page_rank(hdt:HDTDocument, forget_triples:list = []):
+    DiG = nx.DiGraph()
+    triples, _ = hdt.search((None, None, None))
+    for s, p, o in triples:
+        sub = str(s).replace("http://example.org/","")
+        pre = str(p).replace("http://example.org/","")
+        obj = str(o).replace("http://example.org/","")
+        if (sub,pre,obj) in forget_triples:
+            continue
+        DiG.add_edge(sub,obj)
+    return nx.pagerank(DiG)
+        
+def get_WSC_cheap_scores_triples(hdt:HDTDocument, forget_triples:list = [], alpha=0.5, beta = 0.5):
+    predicate_degree_centrality = get_predicate_degree_centrality(hdt,forget_triples)
+    node_pagerank = get_entity_page_rank(hdt,forget_triples)
+    WSC_score_dict = {}
+    triples, cardinality = hdt.search((None, None, None))
+    for s, p, o in triples:
+        sub = str(s).replace("http://example.org/","")
+        pre = str(p).replace("http://example.org/","")
+        obj = str(o).replace("http://example.org/","")
+        WSC_score = alpha * predicate_degree_centrality[pre] + beta * (node_pagerank[sub] + node_pagerank[obj])
+        WSC_score_dict[(sub,pre,obj)] = WSC_score
+    return WSC_score_dict
+
+def get_RBS_dict(hdt:HDTDocument, target:str, forget_triples:list = [], alpha=0.15, theta=0.1):
+    G = nx.Graph()
+    triples, _ = hdt.search((None, None, None))
+    for s, p, o in triples:
+        sub = str(s).replace("http://example.org/","")
+        pre = str(p).replace("http://example.org/","")
+        obj = str(o).replace("http://example.org/","")
+        if (sub,pre,obj) in forget_triples:
+            continue
+        G.add_edge(sub,obj)
+    return RBS_optimized(G, target, alpha, theta)
+    
+
+def get_WSC_cheap_scores_rules(hdt:HDTDocument,rule_list:list,forget_triples:list, alpha=0.5, beta = 0.5, rule_alpha=0.5, rule_beta=0.5):
+    WSC_triple_dict = get_WSC_cheap_scores_triples(hdt, forget_triples, alpha, beta)
+    WSC_score_dict = {}
+    for rule in rule_list:
+        head = rule.split(" <= ")[0]
+        source, _, target = get_s_p_o(head)
+        RBS_dict = get_RBS_dict(hdt, target, forget_triples)
+        body = rule.split(" <= ")[1]
+        body_atoms = body.split(" & ")
+        body_score = 0.0
+        for atom in body_atoms:
+            predicate, subject, object = get_s_p_o(atom)
+            triple_score = WSC_triple_dict[(subject,predicate,object)]
+            body_score += triple_score * rule_alpha + (RBS_dict[subject] + RBS_dict[object]) * 0.5 * rule_beta
+        WSC_score_dict[rule] = body_score
+    return WSC_score_dict
+
+def pforget_LM(rule_list:list, search_space:set):
+    forget_triples = set()
+    least_model = get_least_model(rule_list)
+    for triple in search_space:
+        if triple not in least_model:
+            forget_triples.add(triple)
+    return forget_triples
+
+def pforget_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.5, beta = 0.5, rule_alpha=0.5, rule_beta=0.5, ratio=0.95):
+    forget_triples = set()
+    original_WSC_dict = get_WSC_cheap_scores_rules(hdt, rule_list, [], alpha, beta, rule_alpha, rule_beta)
+    sorted_dict = sorted(WSC_score_dict.items(), key=lambda x: x[1], reverse=True)
+    for rule, _ in sorted_dict:
+        head = rule.split(" <= ")[0]
+        source, _, target = get_s_p_o(head)
+        if (source,_,target) in search_space:
+            forget_triples.add((source,_,target))
+    return forget_triples
