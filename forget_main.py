@@ -24,12 +24,14 @@ if __name__ == "__main__":
     hdt = HDTDocument(args.hdt) # Load an HDT file. Missing index file will be generated
     rule_list = parse_rules("pre_data/uid_pid_explanation_exp2.csv")
     
-    if args.forget_type == "pforget":
-        search_space = build_pforget_search_space(rule_list)
-        LM_tirples = forget_LM(rule_list, search_space)
-        save_triples(LM_tirples, "forget_data/pforget_LM_triples.txt")
-        WSC_triples = forget_WSC(hdt, rule_list, search_space)
-        save_triples(WSC_triples, "forget_data/pforget_WSC_triples.txt")
+    pre_compute_everything_for_forget(hdt, rule_list)
+    
+    # if args.forget_type == "pforget":
+    #     search_space = build_pforget_search_space(rule_list)
+    #     LM_tirples = forget_LM(rule_list, search_space)
+    #     save_triples(LM_tirples, "forget_data/pforget_LM_triples.txt")
+    #     WSC_triples = forget_WSC(hdt, rule_list, search_space)
+    #     save_triples(WSC_triples, "forget_data/pforget_WSC_triples.txt")
     # elif args.forget_type == "iforget":
     #     forget(hdt, rule_list)
         

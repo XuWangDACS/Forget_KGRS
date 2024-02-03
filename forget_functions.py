@@ -7,7 +7,10 @@ import random
 import os
 from tqdm import tqdm
 from extract_rules_from_paths import extract_from_line
+import pickle
+from scipy.sparse import lil_matrix
 
+predicate_set = {'starring', 'produced_by_producer', 'directed_by', 'edited_by', 'cinematography', 'wrote_by', 'belong_to', 'watched', 'produced_by_company', 'watched'}
 
 def parse_rules(rule_path:str):
     file = pd.read_csv(rule_path, delimiter=',',header = 0)
@@ -66,13 +69,13 @@ def check_ground_rule_satisfy(document: HDTDocument, rule):
     body = rule.split(" <= ")[1]
     body_atoms = body.split(" & ")
     for atom in body_atoms:
-        predicate, subject, object = get_s_p_o(atom)
+        subject, predicate, object = get_s_p_o(atom)
         if not check_exist_triple(document, subject, predicate, object):
             # print("Not satisfied triple in body:", subject, predicate, object)
             return False
     return True
 
-def RBS_optimized(G, target, alpha=0.15, theta=0.1):
+def RBS_optimized(G, target, alpha=0.2, theta=0.1):
     lambda_function = lambda u: G.degree(u)
     V = list(G.nodes())
     node_index = {node: idx for idx, node in enumerate(V)}  # Cache node indices
@@ -98,6 +101,33 @@ def RBS_optimized(G, target, alpha=0.15, theta=0.1):
                             estimates[l+1, node_index[u]] += alpha * theta / lambda_function(u)
 
     final_estimates = np.sum(estimates, axis=0)
+    return {V[idx]: val for idx, val in enumerate(final_estimates)}
+
+def RBS_optimized_optimized(G, target, alpha=0.2, theta=0.1):
+    V = list(G.nodes())
+    node_index = {node: idx for idx, node in enumerate(V)}
+    L = int(np.log(1/theta) / np.log(1/alpha))
+    estimates = lil_matrix((L+1, len(V)))  # Use sparse matrix for efficiency
+    target_idx = node_index[target]
+    estimates[0, target_idx] = alpha
+
+    # Pre-calculate degrees and random values
+    degrees = np.array([G.degree(node) for node in V])
+    random_values = np.random.rand(L, len(V))
+
+    for l in range(L):
+        for node_idx, node in enumerate(V):
+            est = estimates[l, node_idx]
+            if est > 0:
+                for u in G.neighbors(node):
+                    u_idx = node_index[u]
+                    dout_u = degrees[u_idx]
+                    if dout_u <= dout_u * (1-alpha) * est / alpha / theta:
+                        estimates[l+1, u_idx] += (1-alpha) * est / dout_u
+                    elif random_values[l, u_idx] < alpha * theta / dout_u:
+                        estimates[l+1, u_idx] += alpha * theta / dout_u
+
+    final_estimates = estimates.sum(axis=0).A1  # Convert to dense array and sum
     return {V[idx]: val for idx, val in enumerate(final_estimates)}
 
 def zero_RBS_for_all_targets(G, targets, alpha=0.15, theta=0.1, lambda_function=None):
@@ -173,19 +203,8 @@ def check_least_model(rule_list:list, least_model:set):
             return False
     return True
         
-def get_predicate_degree_centrality(hdt:HDTDocument, forget_triples:list = []):
-    DiG = nx.DiGraph()
-    predicate_set = set()
-    triples, _ = hdt.search((None, None, None))
-    for s, p, o in triples:
-        sub = str(s).replace("http://example.org/","")
-        pre = str(p).replace("http://example.org/","")
-        obj = str(o).replace("http://example.org/","")
-        if (sub,pre,obj) in forget_triples:
-            continue
-        predicate_set.add(pre)
-        DiG.add_edge(sub,pre)
-        DiG.add_edge(pre,obj)
+def get_predicate_degree_centrality(DiG:nx.DiGraph()):
+    # DiG = nx.DiGraph()
     degree_centrality = nx.degree_centrality(DiG)
     predicate_degree_centrality = {node: centrality for node, centrality in degree_centrality.items() if node in predicate_set}
     return predicate_degree_centrality
@@ -239,7 +258,7 @@ def get_WSC_cheap_scores_rules(hdt:HDTDocument,rule_list:list,forget_triples:lis
         body_atoms = body.split(" & ")
         body_score = 0.0
         for atom in body_atoms:
-            predicate, subject, object = get_s_p_o(atom)
+            subject, predicate, object = get_s_p_o(atom)
             triple_score = WSC_triple_dict[(subject,predicate,object)]
             body_score += triple_score * rule_alpha + (RBS_dict[subject] + RBS_dict[object]) * 0.5 * rule_beta
         WSC_score_dict[rule] = body_score
@@ -253,28 +272,161 @@ def forget_LM(rule_list:list, search_space:set):
             forget_triples.add(triple)
     return forget_triples
 
-def forget_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.5, beta = 0.5, rule_alpha=0.5, rule_beta=0.5, ratio=0.95):
-    forget_triples = set()
-    triple_score_dict = dict()
-    original_WSC_dict = get_WSC_cheap_scores_rules(hdt, rule_list, [], alpha, beta, rule_alpha, rule_beta)
+def get_all_triples_from_rule_list(rule_list:list):
+    triples = set()
+    for rule in rule_list:
+        head = rule.split(" <= ")[0]
+        body = rule.split(" <= ")[1]
+        body_atoms = body.split(" & ")
+        for atom in body_atoms:
+            s, p, o = get_s_p_o(atom)
+            triples.add((s,p,o))
+    return triples
+
+def weighted_average_score(path, node_scores, edge_scores, w_n=0.3, w_e=0.7):
+    node_score = sum(node_scores[node] for node in path)
+    edge_score = sum(edge_scores[(path[i], path[i+1])] for i in range(len(path)-1))
+    total_score = w_n * node_score + w_e * edge_score
+    return total_score / (w_n * len(path) + w_e * (len(path)-1))
+
+def weighted_average_score_triple(triple_list:list, node_scores, edge_scores, w_n=0.3, w_e=0.7):
+    node_score = 0.0
+    edge_score = 0.0
+    for triple in triple_list:
+        s, p ,o = get_s_p_o(triple)
+        
+    node_score = sum(node_scores[node] for node in triple_list)
+    edge_score = sum(edge_scores[(triple_list[i], triple_list[i+1])] for i in range(len(triple_list)-1))
+    total_score = w_n * node_score + w_e * edge_score
+    return total_score / (w_n * len(triple_list) + w_e * (len(triple_list)-1))
+
+def check_with_WSC(G:nx.Graph(),DiG:nx.DiGraph(), rule_list:list, forget_triple, RBS_dicts:dict, predicate_dict:dict, alpha=0.3, beta = 0.7):
+    w_n = alpha
+    w_e = beta
+    s, p ,o = get_s_p_o(forget_triple)
+    G.remove_edge(s,o)
+    RBS_new = RBS_optimized(G, o)
+    G.add_edge(s,o)
+    DiG.remove_edge(s,p)
+    DiG.remove_edge(p,o)
+    predicate_dict_new = get_predicate_degree_centrality(DiG)
+    DiG.add_edge(s,p)
+    DiG.add_edge(p,o)
+    triple_score = 0.0
+    for rule in rule_list:
+        head = rule.split(" <= ")[0]
+        source, _, target = get_s_p_o(head)
+        RBS_old_target = RBS_dicts[target]
+        RBS_new_target = RBS_new[target]
+        body = rule.split(" <= ")[1]
+        body_atoms = body.split(" & ")
+        body_score_old = 0.0
+        body_score_new = 0.0
+        for atom in body_atoms:
+            subject, predicate, object = get_s_p_o(atom)
+            body_score_old += w_e * predicate_dict[predicate] + w_n * (predicate_dict[subject] + predicate_dict[object])
+            body_score_new += w_e * predicate_dict_new[predicate] + w_n * (predicate_dict_new[subject] + predicate_dict_new[object])
+        triple_score += (body_score_new - body_score_old) / (3.0*w_n + 2.0*w_e)
+    return triple_score
+
+def forget_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.3, beta = 0.7, ratio=0.95):
+    forget_triples = dict()
+    rule_triples = get_all_triples_from_rule_list(rule_list)
+    g = nx.Graph()
+    dig = nx.DiGraph()
+    triples, _ = hdt.search((None, None, None))
+    for s, p, o in triples:
+        sub = str(s).replace("http://example.org/","")
+        pre = str(p).replace("http://example.org/","")
+        obj = str(o).replace("http://example.org/","")
+        g.add_edge(sub,obj)
+        dig.add_edge(sub,pre)
+        dig.add_edge(pre,obj)
+    RBS_dicts = {}
+    predicate_dict = get_predicate_degree_centrality(dig)
+    for rule in tqdm(rule_list,desc="building init RBS for each rule"):
+        head = rule.split(" <= ")[0]
+        source, _, target = get_s_p_o(head)
+        RBS_dicts[target] = RBS_optimized(g, target)
     for triple in tqdm(search_space, desc="analysing search space with WSC impact"):
-        delta_socre = 0.0
-        forget_WSC_dict = get_WSC_cheap_scores_rules(hdt, rule_list, [triple], alpha, beta, rule_alpha, rule_beta)
-        # delta score will be the sum of all the differences between the original and the forget WSC scores
-        for rule in rule_list:
-            delta_socre += forget_WSC_dict[rule] - original_WSC_dict[rule]
-        triple_score_dict[triple] = delta_socre
-    # select the top radio% of the triples
-    sorted_dict = sorted(triple_score_dict.items(), key=lambda x: x[1], reverse=True)
-    forget_triples = set([triple for triple, _ in sorted_dict[:int(len(sorted_dict)*ratio)]])
-    return forget_triples
+        if triple in rule_triples:
+            continue
+        forget_triples[triple] = check_with_WSC(g,dig,rule_list, triple, RBS_dicts, predicate_dict, alpha, beta)
+    # sort forget_triples from the highest to the lowest
+    forget_triple_dict = sorted(forget_triples.items(), key=lambda x: x[1], reverse=True)
+    # select top ratio% of the triples
+    forget_triples = set([triple for triple, _ in forget_triple_dict[:int(len(forget_triple_dict)*ratio)]])
+    
+    # triple_score_dict = dict()
+    # original_WSC_dict = get_WSC_cheap_scores_rules(hdt, rule_list, [], alpha, beta, rule_alpha, rule_beta)
+    # # for rule in rule_list:
+        
+    # for triple in tqdm(search_space, desc="analysing search space with WSC impact"):
+    #     delta_socre = 0.0
+    #     forget_WSC_dict = get_WSC_cheap_scores_rules(hdt, rule_list, [triple], alpha, beta, rule_alpha, rule_beta)
+    #     # delta score will be the sum of all the differences between the original and the forget WSC scores
+    #     for rule in rule_list:
+    #         delta_socre += forget_WSC_dict[rule] - original_WSC_dict[rule]
+    #     triple_score_dict[triple] = delta_socre
+    # # select the top radio% of the triples
+    # sorted_dict = sorted(triple_score_dict.items(), key=lambda x: x[1], reverse=True)
+    # forget_triples = set([triple for triple, _ in sorted_dict[:int(len(sorted_dict)*ratio)]])
+    # return forget_triples
 
 def forget_LM_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.5, beta = 0.5, rule_alpha=0.5, rule_beta=0.5, ratio=0.95):
     LM_triples = forget_LM(rule_list, search_space)
     WSC_triples = forget_WSC(hdt, rule_list, LM_triples, alpha, beta, rule_alpha, rule_beta, ratio)
     return WSC_triples
 
+def pre_compute_everything_for_forget(hdt:HDTDocument, rules:list):
+    g = nx.Graph()
+    dig = nx.DiGraph()
+    triples, _ = hdt.search((None, None, None))
+    entities = set()
+    forget_triples = set()
+    for s, p, o in triples:
+        sub = str(s).replace("http://example.org/","")
+        pre = str(p).replace("http://example.org/","")
+        obj = str(o).replace("http://example.org/","")
+        g.add_edge(sub,obj)
+        dig.add_edge(sub,pre)
+        dig.add_edge(pre,obj)
+        entities.add(sub)
+        entities.add(obj)
+        forget_triples.add(f"{pre}({sub},{obj})")
+    RBS_dicts = {}
+    predicate_dicts = {}
+    predicate_dicts["init"] = get_predicate_degree_centrality(dig)
+    RBS_dict = {}
+    for rule in tqdm(rules,desc="foreach rule"):
+        head = rule.split(" <= ")[0]
+        source, _, target = get_s_p_o(head)
+        RBS_dict[target] = RBS_optimized(g, target)
+    RBS_dicts["init"] = RBS_dict
+    print(RBS_dicts)
+    
+    for triple in tqdm(forget_triples, desc="foreach triple"):
+        s, p, o = get_s_p_o(triple)
+        g.remove_edge(s,o)
+        dig.remove_edge(s,p)
+        dig.remove_edge(p,o)
+        predicate_dicts[triple] = get_predicate_degree_centrality(dig)
+        RBS_dict = {}
+        for rule in rules:
+            head = rule.split(" <= ")[0]
+            source, _, target = get_s_p_o(head)
+            RBS_dict[target] = RBS_optimized(g, target)
+        RBS_dicts[triple] = RBS_dict
+        g.add_edge(s,o)
+        dig.add_edge(s,p)
+        dig.add_edge(p,o)
+    with open("forget_data/RBS_dicts.pickle", "wb") as f:
+        pickle.dump(RBS_dicts, f)
+    with open("forget_data/predicate_dicts.pickle", "wb") as f:
+        pickle.dump(predicate_dicts, f)
+
 def save_triples(triples:set, path:str):
     with open(path, "w") as f:
         for triple in triples:
             f.write(f"{triple[0]},{triple[1]},{triple[2]}\n")
+    return

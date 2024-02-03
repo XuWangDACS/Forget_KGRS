@@ -56,36 +56,36 @@ def extract_from_line(line):
                 triple_path.add(object)
     return triples,triples_tsv, triple_path
 
-file1 = pd.read_csv('pre_data/uid_pid_explanation_exp1.csv', delimiter=',',header = 0)
-# Process each line separately
-for index, row in file1.iterrows():
-    path = row['path']
-    body,body_tsv, tpath = extract_from_line(path)
-    body_t = '\t'.join(body_tsv)
-    rule_tsv = f"user\t{row['uid']}\trecommend\tmovie\t{row['pid']}\t<=\t{body_t}"  # Join the body with spaces
-    rule = f"recommend(user{row['uid']},movie{row['pid']}) <= {' & '.join(body)}"  # Join the body with spaces
-    tpath = '\t'.join(tpath)
-    rule_path = f"user{row['uid']}\tmovie{row['pid']}\t{tpath}"
-    with open("exp_data/rules_exp1.txt", "a+") as f:
-        f.write(rule + "\n")
-    with open("exp_data/rules_exp1.tsv", "a+") as f:
-        f.write(rule_tsv + "\n")
-    with open("exp_data/paths_exp1.txt", "a+") as f:
-        f.write(rule_path + "\n")
+# file1 = pd.read_csv('pre_data/uid_pid_explanation_exp1.csv', delimiter=',',header = 0)
+# # Process each line separately
+# for index, row in file1.iterrows():
+#     path = row['path']
+#     body,body_tsv, tpath = extract_from_line(path)
+#     body_t = '\t'.join(body_tsv)
+#     rule_tsv = f"user\t{row['uid']}\trecommend\tmovie\t{row['pid']}\t<=\t{body_t}"  # Join the body with spaces
+#     rule = f"recommend(user{row['uid']},movie{row['pid']}) <= {' & '.join(body)}"  # Join the body with spaces
+#     tpath = '\t'.join(tpath)
+#     rule_path = f"user{row['uid']}\tmovie{row['pid']}\t{tpath}"
+#     with open("exp_data/rules_exp1.txt", "a+") as f:
+#         f.write(rule + "\n")
+#     with open("exp_data/rules_exp1.tsv", "a+") as f:
+#         f.write(rule_tsv + "\n")
+#     with open("exp_data/paths_exp1.txt", "a+") as f:
+#         f.write(rule_path + "\n")
         
-file2 = pd.read_csv('pre_data/uid_pid_explanation_exp2.csv', delimiter=',',header = 0)
-# Process each line separately
-for index, row in file1.iterrows():
-    path = row['path']
-    body,body_tsv,tpath = extract_from_line(path)
-    body_t = '\t'.join(body_tsv)
-    rule_tsv = f"user\t{row['uid']}\trecommend\tmovie\t{row['pid']}\t<=\t{body_t}"  # Join the body with spaces
-    rule = f"recommend(user{row['uid']},movie{row['pid']}) <= {' & '.join(body)}"  # Join the body with spaces
-    tpath = '\t'.join(tpath)
-    rule_path = f"user{row['uid']}\tmovie{row['pid']}\t{tpath}"
-    with open("exp_data/rules_exp2.txt", "a+") as f:
-        f.write(rule + "\n")
-    with open("exp_data/rules_exp2.tsv", "a+") as f:
-        f.write(rule_tsv + "\n")
-    with open("exp_data/paths_exp2.txt", "a+") as f:
-        f.write(rule_path + "\n")
+# file2 = pd.read_csv('pre_data/uid_pid_explanation_exp2.csv', delimiter=',',header = 0)
+# # Process each line separately
+# for index, row in file1.iterrows():
+#     path = row['path']
+#     body,body_tsv,tpath = extract_from_line(path)
+#     body_t = '\t'.join(body_tsv)
+#     rule_tsv = f"user\t{row['uid']}\trecommend\tmovie\t{row['pid']}\t<=\t{body_t}"  # Join the body with spaces
+#     rule = f"recommend(user{row['uid']},movie{row['pid']}) <= {' & '.join(body)}"  # Join the body with spaces
+#     tpath = '\t'.join(tpath)
+#     rule_path = f"user{row['uid']}\tmovie{row['pid']}\t{tpath}"
+#     with open("exp_data/rules_exp2.txt", "a+") as f:
+#         f.write(rule + "\n")
+#     with open("exp_data/rules_exp2.tsv", "a+") as f:
+#         f.write(rule_tsv + "\n")
+#     with open("exp_data/paths_exp2.txt", "a+") as f:
+#         f.write(rule_path + "\n")
