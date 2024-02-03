@@ -5,12 +5,12 @@ import numpy as np
 import networkx as nx
 import random
 import os
+from tqdm import tqdm
 from extract_rules_from_paths import extract_from_line
 
 
 def parse_rules(rule_path:str):
-    assert os.path.isfile(rule_path), f"{rule_path} is not a valid file path"
-    file = pd.read_csv(rule_path, header=None,  delimiter=',')
+    file = pd.read_csv(rule_path, delimiter=',',header = 0)
     rule_list = []
     for _, row in file.iterrows():
         path = row['path']
@@ -28,6 +28,16 @@ def build_pforget_search_space(forget_rules:list):
         for atom in body_atoms:
             s, p, o = get_s_p_o(atom)
             search_space.add((s,p,o))
+    return search_space
+
+def build_iforget_search_space(hdt:HDTDocument):
+    search_space = set()
+    triples, _ = hdt.search((None, None, None))
+    for s, p, o in triples:
+        sub = str(s).replace("http://example.org/","")
+        pre = str(p).replace("http://example.org/","")
+        obj = str(o).replace("http://example.org/","")
+        search_space.add((sub,pre,obj))
     return search_space
 
 def check_exist_triple(document: HDTDocument, s, p ,o):
@@ -235,21 +245,36 @@ def get_WSC_cheap_scores_rules(hdt:HDTDocument,rule_list:list,forget_triples:lis
         WSC_score_dict[rule] = body_score
     return WSC_score_dict
 
-def pforget_LM(rule_list:list, search_space:set):
+def forget_LM(rule_list:list, search_space:set):
     forget_triples = set()
     least_model = get_least_model(rule_list)
-    for triple in search_space:
+    for triple in tqdm(search_space, desc="analysing search space with least model impact"):
         if triple not in least_model:
             forget_triples.add(triple)
     return forget_triples
 
-def pforget_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.5, beta = 0.5, rule_alpha=0.5, rule_beta=0.5, ratio=0.95):
+def forget_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.5, beta = 0.5, rule_alpha=0.5, rule_beta=0.5, ratio=0.95):
     forget_triples = set()
+    triple_score_dict = dict()
     original_WSC_dict = get_WSC_cheap_scores_rules(hdt, rule_list, [], alpha, beta, rule_alpha, rule_beta)
-    sorted_dict = sorted(WSC_score_dict.items(), key=lambda x: x[1], reverse=True)
-    for rule, _ in sorted_dict:
-        head = rule.split(" <= ")[0]
-        source, _, target = get_s_p_o(head)
-        if (source,_,target) in search_space:
-            forget_triples.add((source,_,target))
+    for triple in tqdm(search_space, desc="analysing search space with WSC impact"):
+        delta_socre = 0.0
+        forget_WSC_dict = get_WSC_cheap_scores_rules(hdt, rule_list, [triple], alpha, beta, rule_alpha, rule_beta)
+        # delta score will be the sum of all the differences between the original and the forget WSC scores
+        for rule in rule_list:
+            delta_socre += forget_WSC_dict[rule] - original_WSC_dict[rule]
+        triple_score_dict[triple] = delta_socre
+    # select the top radio% of the triples
+    sorted_dict = sorted(triple_score_dict.items(), key=lambda x: x[1], reverse=True)
+    forget_triples = set([triple for triple, _ in sorted_dict[:int(len(sorted_dict)*ratio)]])
     return forget_triples
+
+def forget_LM_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.5, beta = 0.5, rule_alpha=0.5, rule_beta=0.5, ratio=0.95):
+    LM_triples = forget_LM(rule_list, search_space)
+    WSC_triples = forget_WSC(hdt, rule_list, LM_triples, alpha, beta, rule_alpha, rule_beta, ratio)
+    return WSC_triples
+
+def save_triples(triples:set, path:str):
+    with open(path, "w") as f:
+        for triple in triples:
+            f.write(f"{triple[0]},{triple[1]},{triple[2]}\n")
