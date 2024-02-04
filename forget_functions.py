@@ -9,6 +9,7 @@ from tqdm import tqdm
 from extract_rules_from_paths import extract_from_line
 import pickle
 from scipy.sparse import lil_matrix
+import graph_tool.all as gt_all
 
 predicate_set = {'starring', 'produced_by_producer', 'directed_by', 'edited_by', 'cinematography', 'wrote_by', 'belong_to', 'watched', 'produced_by_company', 'watched'}
 
@@ -103,31 +104,32 @@ def RBS_optimized(G, target, alpha=0.2, theta=0.1):
     final_estimates = np.sum(estimates, axis=0)
     return {V[idx]: val for idx, val in enumerate(final_estimates)}
 
-def RBS_optimized_optimized(G, target, alpha=0.2, theta=0.1):
+def RBS_optimized_3hops(G, target, alpha=0.2, theta=0.1):
+    lambda_function = lambda u: G.degree(u)
     V = list(G.nodes())
-    node_index = {node: idx for idx, node in enumerate(V)}
-    L = int(np.log(1/theta) / np.log(1/alpha))
-    estimates = lil_matrix((L+1, len(V)))  # Use sparse matrix for efficiency
+    node_index = {node: idx for idx, node in enumerate(V)}  # Cache node indices
+    L = 3  # Set the number of iterations to 3 for max hop=3
+    estimates = np.zeros((L+1, len(V)))
     target_idx = node_index[target]
     estimates[0, target_idx] = alpha
 
-    # Pre-calculate degrees and random values
-    degrees = np.array([G.degree(node) for node in V])
-    random_values = np.random.rand(L, len(V))
+    degrees = {node: G.degree(node) for node in V}  # Pre-calculate degrees
 
     for l in range(L):
-        for node_idx, node in enumerate(V):
-            est = estimates[l, node_idx]
-            if est > 0:
+        for node in V:
+            node_idx = node_index[node]
+            if estimates[l, node_idx] > 0:
                 for u in G.neighbors(node):
-                    u_idx = node_index[u]
-                    dout_u = degrees[u_idx]
-                    if dout_u <= dout_u * (1-alpha) * est / alpha / theta:
-                        estimates[l+1, u_idx] += (1-alpha) * est / dout_u
-                    elif random_values[l, u_idx] < alpha * theta / dout_u:
-                        estimates[l+1, u_idx] += alpha * theta / dout_u
+                    dout_u = degrees[u]
+                    est = estimates[l, node_idx]
+                    if dout_u <= lambda_function(u) * (1-alpha) * est / alpha / theta:
+                        estimates[l+1, node_index[u]] += (1-alpha) * est / dout_u
+                    else:
+                        r = random.random()
+                        if r < alpha * theta / lambda_function(u):
+                            estimates[l+1, node_index[u]] += alpha * theta / lambda_function(u)
 
-    final_estimates = estimates.sum(axis=0).A1  # Convert to dense array and sum
+    final_estimates = np.sum(estimates, axis=0)
     return {V[idx]: val for idx, val in enumerate(final_estimates)}
 
 def zero_RBS_for_all_targets(G, targets, alpha=0.15, theta=0.1, lambda_function=None):
@@ -378,9 +380,32 @@ def forget_LM_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.5, 
     WSC_triples = forget_WSC(hdt, rule_list, LM_triples, alpha, beta, rule_alpha, rule_beta, ratio)
     return WSC_triples
 
+def reverse_backward_sampling_gt(graph, target, max_hop=3, num_samples=100):
+    n_vertices = graph.num_vertices()
+    influence_scores = np.zeros(n_vertices)   
+    for _ in range(num_samples):
+        current_hop = 0
+        current_node = target
+        while current_hop < max_hop:
+            influence_scores[current_node] += 1
+            predecessors = [v for v in graph.vertex(current_node).in_neighbors()]          
+            if not predecessors:
+                break
+            current_node = random.choice(predecessors).index
+            current_hop += 1
+    influence_scores /= num_samples
+    return influence_scores
+
+def reverse_backward_sampling_gt_to_dict(graph, target, max_hop=3, num_samples=100):
+    influence_scores_array = reverse_backward_sampling_gt(graph, target, max_hop, num_samples)
+    influence_scores_dict = {int(v): score for v, score in enumerate(influence_scores_array)}
+    return influence_scores_dict
+
 def pre_compute_everything_for_forget(hdt:HDTDocument, rules:list):
-    g = nx.Graph()
+    # g = nx.Graph()
     dig = nx.DiGraph()
+    gt = gt_all.Graph(directed=False)
+    vertex_dict = {}
     triples, _ = hdt.search((None, None, None))
     entities = set()
     forget_triples = set()
@@ -388,7 +413,12 @@ def pre_compute_everything_for_forget(hdt:HDTDocument, rules:list):
         sub = str(s).replace("http://example.org/","")
         pre = str(p).replace("http://example.org/","")
         obj = str(o).replace("http://example.org/","")
-        g.add_edge(sub,obj)
+        if sub not in vertex_dict:
+            vertex_dict[sub] = gt.add_vertex()
+        if obj not in vertex_dict:
+            vertex_dict[obj] = gt.add_vertex()
+        gt.add_edge(vertex_dict[sub], vertex_dict[obj])
+        # g.add_edge(sub,obj)
         dig.add_edge(sub,pre)
         dig.add_edge(pre,obj)
         entities.add(sub)
@@ -401,13 +431,17 @@ def pre_compute_everything_for_forget(hdt:HDTDocument, rules:list):
     for rule in tqdm(rules,desc="foreach rule"):
         head = rule.split(" <= ")[0]
         source, _, target = get_s_p_o(head)
-        RBS_dict[target] = RBS_optimized(g, target)
+        target_vertex = vertex_dict[target]
+        gt_RBS = reverse_backward_sampling_gt_to_dict(gt, int(target_vertex))
+        RBS = {k: gt_RBS[int(vertex_dict[k])] for k in vertex_dict.keys()}
+        RBS_dict[target] = RBS
     RBS_dicts["init"] = RBS_dict
     print(RBS_dicts)
     
     for triple in tqdm(forget_triples, desc="foreach triple"):
         s, p, o = get_s_p_o(triple)
-        g.remove_edge(s,o)
+        # g.remove_edge(s,o)
+        gt.remove_edge(vertex_dict[s], vertex_dict[o])
         dig.remove_edge(s,p)
         dig.remove_edge(p,o)
         predicate_dicts[triple] = get_predicate_degree_centrality(dig)
@@ -415,9 +449,13 @@ def pre_compute_everything_for_forget(hdt:HDTDocument, rules:list):
         for rule in rules:
             head = rule.split(" <= ")[0]
             source, _, target = get_s_p_o(head)
-            RBS_dict[target] = RBS_optimized(g, target)
+            target_vertex = vertex_dict[target]
+            gt_RBS = reverse_backward_sampling_gt_to_dict(gt, int(target_vertex))
+            RBS = {k: gt_RBS[int(vertex_dict[k])] for k in vertex_dict.keys()}
+            RBS_dict[target] = RBS
         RBS_dicts[triple] = RBS_dict
-        g.add_edge(s,o)
+        # g.add_edge(s,o)
+        gt.add_edge(vertex_dict[s], vertex_dict[o])
         dig.add_edge(s,p)
         dig.add_edge(p,o)
     with open("forget_data/RBS_dicts.pickle", "wb") as f:
