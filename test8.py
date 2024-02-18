@@ -1,46 +1,59 @@
-import rdflib
-from construct_query import *
+from rdflib_hdt import HDTDocument
+from rdflib import Variable, Namespace, Graph
+from forget_functions import *
+from tqdm import tqdm
+import networkx as nx
 
-g = rdflib.Graph()
+hdt = HDTDocument("forget_data/Knowledge_Graph_without_Review.hdt")
+ex = Namespace("http://example.org/")
 
-g_new = rdflib.Graph()
+graph = nx.Graph()
 
-g.parse("forget_data/KnowlegeGraph.ttl", format="ttl")
+# relation_list = {'starring', 'produced_by_producer', 'directed_by', 'edited_by', 'cinematography', 'wrote_by', 'belong_to', 'produced_by_company'}
 
-construct1 = g.query(query1)
-for triple in construct1:
-    g_new.add(triple)
-    
-construct2 = g.query(query2)
-for triple in construct2:
-    g_new.add(triple)
-    
-construct3 = g.query(query3)
-for triple in construct3:
-    g_new.add(triple)
-    
-construct4 = g.query(query4)
-for triple in construct4:
-    g_new.add(triple)
-    
-construct5 = g.query(query5)
-for triple in construct5:
-    g_new.add(triple)
-    
-construct6 = g.query(query6)
-for triple in construct6:
-    g_new.add(triple)
-    
-construct7 = g.query(query7)
-for triple in construct7:
-    g_new.add(triple)
-    
-construct8 = g.query(query8)
-for triple in construct8:
-    g_new.add(triple)
-    
-construct9 = g.query(query9)
-for triple in construct9:
-    g_new.add(triple)
-    
-g_new.serialize(destination='forget_data/construct.ttl', format='ttl')
+# for relation in tqdm(relation_list):
+#     triples,_  = hdt.search((None, ex[relation], None))
+#     for s,p,o in triples:
+#         with open(f"forget_data/Knowledge_Graph_without_Review.nt", "a+") as file:
+#             file.write(f"<{s}> <{p}> <{o}> .\n")
+
+general_rules = []
+
+with open("forget_data/general_rules_wo_watch.txt", "r") as file:
+    for line in file:
+        general_rules.append(line.strip())
+        
+for rule in tqdm(general_rules):
+    query = []
+    body = rule.split(" <= ")[1]
+    atoms = body.split(" & ")
+    tamplate = []
+    var_dict = {}
+    for atom in atoms:
+        s, p, o = get_s_p_o(atom)
+        if s not in var_dict:
+            var_dict[s] = Variable(s)
+        if o not in var_dict:
+            var_dict[o] = Variable(o)
+        query.append((var_dict[s], ex[p], var_dict[o]))
+        tamplate.append((s, p, o))
+        # print(s, p, o)
+    iterator = hdt.search_join(query)
+    for row in iterator:
+        if len(row) != 3:
+            continue
+        if row.A == row.B or row.B == row.C or row.A == row.C:
+            continue
+        # print(row)
+        graph.add_edge(row.A.replace("http://example.org/",""), row.B.replace("http://example.org/",""))
+        # for tamp in tamplate:
+            # print(tamp)
+            # print(row[tamp[0]], ex[tamp[1]], row[tamp[2]])
+            # with open("forget_data/general_rules.nt", "a+") as file:
+                # file.write(f"<{row[tamp[0]]}> <{ex[tamp[1]]}> <{row[tamp[2]]}> .\n")
+        # break
+    # g.serialize("forget_data/general_rules.nt", format="nt")
+    # break
+print(graph)
+# g_test = Graph()
+# g_test.parse("forget_data/general_rules.nt", format="nt")

@@ -11,7 +11,16 @@ import pickle
 from scipy.sparse import lil_matrix
 import graph_tool.all as gt_all
 
-predicate_set = {'starring', 'produced_by_producer', 'directed_by', 'edited_by', 'cinematography', 'wrote_by', 'belong_to', 'watched', 'produced_by_company', 'watched'}
+predicate_set = {'starring', 'produced_by_producer', 'directed_by', 'edited_by', 'cinematography', 'wrote_by', 'belong_to', 'produced_by_company', 'watched'}
+
+def construct_graph_dict_from_hdt(hdt:HDTDocument):
+    graph_dict = {}
+    ex = Namespace("http://example.org/")
+    for relation in tqdm(predicate_set,desc="Creating Graphs"):
+        graph_dict[relation] = nx.DiGraph()
+        triples,_  = hdt.search((None, ex[relation], None))
+        for s,p,o in triples:
+            graph_dict[relation].add_edge(s.replace("http://example.org/",""), o.replace("http://example.org/",""))
 
 def parse_rules(rule_path:str):
     file = pd.read_csv(rule_path, delimiter=',',header = 0)
@@ -334,6 +343,7 @@ def check_with_WSC(G:nx.Graph(),DiG:nx.DiGraph(), rule_list:list, forget_triple,
 def forget_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.3, beta = 0.7, ratio=0.95):
     forget_triples = dict()
     rule_triples = get_all_triples_from_rule_list(rule_list)
+    predicate_graph_dict = construct_graph_dict_from_hdt(hdt)
     g = nx.Graph()
     dig = nx.DiGraph()
     triples, _ = hdt.search((None, None, None))
