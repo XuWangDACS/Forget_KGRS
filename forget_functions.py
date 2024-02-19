@@ -9,7 +9,7 @@ from tqdm import tqdm
 from extract_rules_from_paths import extract_from_line
 import pickle
 from scipy.sparse import lil_matrix
-import graph_tool.all as gt_all
+# import graph_tool.all as gt_all
 
 predicate_set = {'starring', 'produced_by_producer', 'directed_by', 'edited_by', 'cinematography', 'wrote_by', 'belong_to', 'produced_by_company', 'watched'}
 
@@ -311,6 +311,10 @@ def weighted_average_score_triple(triple_list:list, node_scores, edge_scores, w_
     total_score = w_n * node_score + w_e * edge_score
     return total_score / (w_n * len(triple_list) + w_e * (len(triple_list)-1))
 
+def ppr_score(G:nx.Graph(), target):
+    personalization = {node: 1 if node == target else 0 for node in G.nodes()}
+    return nx.pagerank(G, personalization=personalization)
+
 def check_with_WSC(G:nx.Graph(),DiG:nx.DiGraph(), rule_list:list, forget_triple, RBS_dicts:dict, predicate_dict:dict, alpha=0.3, beta = 0.7):
     w_n = alpha
     w_e = beta
@@ -340,10 +344,37 @@ def check_with_WSC(G:nx.Graph(),DiG:nx.DiGraph(), rule_list:list, forget_triple,
         triple_score += (body_score_new - body_score_old) / (3.0*w_n + 2.0*w_e)
     return triple_score
 
+def check_with_WSC_PPR(G:nx.Graph(),DiG:nx.DiGraph(), rule_list:list, forget_triple,PPR_dicts:dict, predicate_dict:dict, alpha=0.3, beta = 0.7):
+    w_n = alpha
+    w_e = beta
+    s, p ,o = forget_triple
+    G.remove_edge(s,o)
+    DiG.remove_edge(s,p)
+    DiG.remove_edge(p,o)
+    predicate_dict_new = get_predicate_degree_centrality(DiG)
+    DiG.add_edge(s,p)
+    DiG.add_edge(p,o)
+    triple_score = 0.0
+    for rule in rule_list:
+        head = rule.split(" <= ")[0]
+        source, _, target = get_s_p_o(head)
+        ppr_new = ppr_score(G, target)
+        body = rule.split(" <= ")[1]
+        body_atoms = body.split(" & ")
+        body_score_old = 0.0
+        body_score_new = 0.0
+        for atom in body_atoms:
+            subject, predicate, object = get_s_p_o(atom)
+            body_score_old += w_e * predicate_dict[predicate] + w_n * (PPR_dicts[target][subject] + PPR_dicts[target][object])
+            body_score_new += w_e * predicate_dict_new[predicate] + w_n * (ppr_new[subject] + ppr_new[object])
+        triple_score += (body_score_new - body_score_old) / (3.0*w_n + 2.0*w_e)
+    G.add_edge(s,o)
+    return triple_score
+
 def forget_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.3, beta = 0.7, ratio=0.95):
     forget_triples = dict()
     rule_triples = get_all_triples_from_rule_list(rule_list)
-    predicate_graph_dict = construct_graph_dict_from_hdt(hdt)
+    # predicate_graph_dict = construct_graph_dict_from_hdt(hdt)
     g = nx.Graph()
     dig = nx.DiGraph()
     triples, _ = hdt.search((None, None, None))
@@ -354,16 +385,17 @@ def forget_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.3, bet
         g.add_edge(sub,obj)
         dig.add_edge(sub,pre)
         dig.add_edge(pre,obj)
-    RBS_dicts = {}
+    PPR_dicts = {}
     predicate_dict = get_predicate_degree_centrality(dig)
-    for rule in tqdm(rule_list,desc="building init RBS for each rule"):
+    for rule in tqdm(rule_list,desc="building init PPR for each rule"):
         head = rule.split(" <= ")[0]
         source, _, target = get_s_p_o(head)
-        RBS_dicts[target] = RBS_optimized(g, target)
+        PPR_dicts[target] = ppr_score(g, target)
     for triple in tqdm(search_space, desc="analysing search space with WSC impact"):
         if triple in rule_triples:
             continue
-        forget_triples[triple] = check_with_WSC(g,dig,rule_list, triple, RBS_dicts, predicate_dict, alpha, beta)
+        # forget_triples[triple] = check_with_WSC(g,dig,rule_list, triple, RBS_dicts, predicate_dict, alpha, beta)
+        forget_triples[triple] = check_with_WSC_PPR(g,dig,rule_list, triple,PPR_dicts, predicate_dict, alpha, beta)
     # sort forget_triples from the highest to the lowest
     forget_triple_dict = sorted(forget_triples.items(), key=lambda x: x[1], reverse=True)
     # select top ratio% of the triples
@@ -383,7 +415,7 @@ def forget_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.3, bet
     # # select the top radio% of the triples
     # sorted_dict = sorted(triple_score_dict.items(), key=lambda x: x[1], reverse=True)
     # forget_triples = set([triple for triple, _ in sorted_dict[:int(len(sorted_dict)*ratio)]])
-    # return forget_triples
+    return forget_triples
 
 def forget_LM_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.5, beta = 0.5, rule_alpha=0.5, rule_beta=0.5, ratio=0.95):
     LM_triples = forget_LM(rule_list, search_space)
@@ -411,67 +443,67 @@ def reverse_backward_sampling_gt_to_dict(graph, target, max_hop=3, num_samples=1
     influence_scores_dict = {int(v): score for v, score in enumerate(influence_scores_array)}
     return influence_scores_dict
 
-def pre_compute_everything_for_forget(hdt:HDTDocument, rules:list):
-    # g = nx.Graph()
-    dig = nx.DiGraph()
-    gt = gt_all.Graph(directed=False)
-    vertex_dict = {}
-    triples, _ = hdt.search((None, None, None))
-    entities = set()
-    forget_triples = set()
-    for s, p, o in triples:
-        sub = str(s).replace("http://example.org/","")
-        pre = str(p).replace("http://example.org/","")
-        obj = str(o).replace("http://example.org/","")
-        if sub not in vertex_dict:
-            vertex_dict[sub] = gt.add_vertex()
-        if obj not in vertex_dict:
-            vertex_dict[obj] = gt.add_vertex()
-        gt.add_edge(vertex_dict[sub], vertex_dict[obj])
-        # g.add_edge(sub,obj)
-        dig.add_edge(sub,pre)
-        dig.add_edge(pre,obj)
-        entities.add(sub)
-        entities.add(obj)
-        forget_triples.add(f"{pre}({sub},{obj})")
-    RBS_dicts = {}
-    predicate_dicts = {}
-    predicate_dicts["init"] = get_predicate_degree_centrality(dig)
-    RBS_dict = {}
-    for rule in tqdm(rules,desc="foreach rule"):
-        head = rule.split(" <= ")[0]
-        source, _, target = get_s_p_o(head)
-        target_vertex = vertex_dict[target]
-        gt_RBS = reverse_backward_sampling_gt_to_dict(gt, int(target_vertex))
-        RBS = {k: gt_RBS[int(vertex_dict[k])] for k in vertex_dict.keys()}
-        RBS_dict[target] = RBS
-    RBS_dicts["init"] = RBS_dict
-    print(RBS_dicts)
+# def pre_compute_everything_for_forget(hdt:HDTDocument, rules:list):
+#     # g = nx.Graph()
+#     dig = nx.DiGraph()
+#     gt = gt_all.Graph(directed=False)
+#     vertex_dict = {}
+#     triples, _ = hdt.search((None, None, None))
+#     entities = set()
+#     forget_triples = set()
+#     for s, p, o in triples:
+#         sub = str(s).replace("http://example.org/","")
+#         pre = str(p).replace("http://example.org/","")
+#         obj = str(o).replace("http://example.org/","")
+#         if sub not in vertex_dict:
+#             vertex_dict[sub] = gt.add_vertex()
+#         if obj not in vertex_dict:
+#             vertex_dict[obj] = gt.add_vertex()
+#         gt.add_edge(vertex_dict[sub], vertex_dict[obj])
+#         # g.add_edge(sub,obj)
+#         dig.add_edge(sub,pre)
+#         dig.add_edge(pre,obj)
+#         entities.add(sub)
+#         entities.add(obj)
+#         forget_triples.add(f"{pre}({sub},{obj})")
+#     RBS_dicts = {}
+#     predicate_dicts = {}
+#     predicate_dicts["init"] = get_predicate_degree_centrality(dig)
+#     RBS_dict = {}
+#     for rule in tqdm(rules,desc="foreach rule"):
+#         head = rule.split(" <= ")[0]
+#         source, _, target = get_s_p_o(head)
+#         target_vertex = vertex_dict[target]
+#         gt_RBS = reverse_backward_sampling_gt_to_dict(gt, int(target_vertex))
+#         RBS = {k: gt_RBS[int(vertex_dict[k])] for k in vertex_dict.keys()}
+#         RBS_dict[target] = RBS
+#     RBS_dicts["init"] = RBS_dict
+#     print(RBS_dicts)
     
-    for triple in tqdm(forget_triples, desc="foreach triple"):
-        s, p, o = get_s_p_o(triple)
-        # g.remove_edge(s,o)
-        gt.remove_edge(vertex_dict[s], vertex_dict[o])
-        dig.remove_edge(s,p)
-        dig.remove_edge(p,o)
-        predicate_dicts[triple] = get_predicate_degree_centrality(dig)
-        RBS_dict = {}
-        for rule in rules:
-            head = rule.split(" <= ")[0]
-            source, _, target = get_s_p_o(head)
-            target_vertex = vertex_dict[target]
-            gt_RBS = reverse_backward_sampling_gt_to_dict(gt, int(target_vertex))
-            RBS = {k: gt_RBS[int(vertex_dict[k])] for k in vertex_dict.keys()}
-            RBS_dict[target] = RBS
-        RBS_dicts[triple] = RBS_dict
-        # g.add_edge(s,o)
-        gt.add_edge(vertex_dict[s], vertex_dict[o])
-        dig.add_edge(s,p)
-        dig.add_edge(p,o)
-    with open("forget_data/RBS_dicts.pickle", "wb") as f:
-        pickle.dump(RBS_dicts, f)
-    with open("forget_data/predicate_dicts.pickle", "wb") as f:
-        pickle.dump(predicate_dicts, f)
+#     for triple in tqdm(forget_triples, desc="foreach triple"):
+#         s, p, o = get_s_p_o(triple)
+#         # g.remove_edge(s,o)
+#         gt.remove_edge(vertex_dict[s], vertex_dict[o])
+#         dig.remove_edge(s,p)
+#         dig.remove_edge(p,o)
+#         predicate_dicts[triple] = get_predicate_degree_centrality(dig)
+#         RBS_dict = {}
+#         for rule in rules:
+#             head = rule.split(" <= ")[0]
+#             source, _, target = get_s_p_o(head)
+#             target_vertex = vertex_dict[target]
+#             gt_RBS = reverse_backward_sampling_gt_to_dict(gt, int(target_vertex))
+#             RBS = {k: gt_RBS[int(vertex_dict[k])] for k in vertex_dict.keys()}
+#             RBS_dict[target] = RBS
+#         RBS_dicts[triple] = RBS_dict
+#         # g.add_edge(s,o)
+#         gt.add_edge(vertex_dict[s], vertex_dict[o])
+#         dig.add_edge(s,p)
+#         dig.add_edge(p,o)
+#     with open("forget_data/RBS_dicts.pickle", "wb") as f:
+#         pickle.dump(RBS_dicts, f)
+#     with open("forget_data/predicate_dicts.pickle", "wb") as f:
+#         pickle.dump(predicate_dicts, f)
 
 def save_triples(triples:set, path:str):
     with open(path, "w") as f:

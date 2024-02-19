@@ -26,13 +26,18 @@ if __name__ == "__main__":
     
     # pre_compute_everything_for_forget(hdt, rule_list)
     
-    if args.forget_type == "pforget":
-        search_space = build_pforget_search_space(rule_list)
-        LM_tirples = forget_LM(rule_list, search_space)
-        save_triples(LM_tirples, "forget_data/pforget_LM_triples.txt")
-        WSC_triples = forget_WSC(hdt, rule_list, search_space)
-        save_triples(WSC_triples, "forget_data/pforget_WSC_triples.txt")
+    # if args.forget_type == "pforget":
+    #     search_space = build_pforget_search_space(rule_list)
+    #     LM_tirples = forget_LM(rule_list, search_space)
+    #     save_triples(LM_tirples, "forget_data/pforget_LM_triples.txt")
+    #     WSC_triples = forget_WSC(hdt, rule_list, search_space)
+    #     save_triples(WSC_triples, "forget_data/pforget_WSC_triples.txt")
     # elif args.forget_type == "iforget":
         # forget(hdt, rule_list)
-        
+    
+    search_space = build_iforget_search_space(hdt)
+    LM_triples = forget_LM(rule_list, search_space)
+    save_triples(LM_triples, "forget_data/iforget_LM_triples.txt")
+    WSC_triples = forget_WSC(hdt, rule_list, search_space)
+    save_triples(WSC_triples, "forget_data/iforget_WSC_triples.txt")
     
