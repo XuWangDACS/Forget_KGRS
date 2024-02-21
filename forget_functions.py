@@ -60,7 +60,7 @@ def check_exist_triple(document: HDTDocument, s, p ,o):
         return True
     else:
         return False
-    
+
 def get_s_p_o(atom):
     """
     Args:
@@ -159,7 +159,7 @@ def find_least_model(init_G,update_G, rule):
     Args:
         init_G: initial graph
         rule: rule in string
-        
+
     Returns:
         updated or non-updated graph
         boolean value indicating whether the graph is updated
@@ -185,7 +185,7 @@ def find_least_model(init_G,update_G, rule):
         {body_query}
     }}
     """
-    
+
     init_len = 0
     update_len = -1
     while(init_len != update_len):
@@ -213,7 +213,7 @@ def check_least_model(rule_list:list, least_model:set):
         if head not in least_model or not least_model.issuperset(set(body_atoms)):
             return False
     return True
-        
+
 def get_predicate_degree_centrality(DiG:nx.DiGraph()):
     # DiG = nx.DiGraph()
     degree_centrality = nx.degree_centrality(DiG)
@@ -231,7 +231,7 @@ def get_entity_page_rank(hdt:HDTDocument, forget_triples:list = []):
             continue
         DiG.add_edge(sub,obj)
     return nx.pagerank(DiG)
-        
+
 def get_WSC_cheap_scores_triples(hdt:HDTDocument, forget_triples:list = [], alpha=0.5, beta = 0.5):
     predicate_degree_centrality = get_predicate_degree_centrality(hdt,forget_triples)
     node_pagerank = get_entity_page_rank(hdt,forget_triples)
@@ -256,7 +256,7 @@ def get_RBS_dict(hdt:HDTDocument, target:str, forget_triples:list = [], alpha=0.
             continue
         G.add_edge(sub,obj)
     return RBS_optimized(G, target, alpha, theta)
-    
+
 
 def get_WSC_cheap_scores_rules(hdt:HDTDocument,rule_list:list,forget_triples:list, alpha=0.5, beta = 0.5, rule_alpha=0.5, rule_beta=0.5):
     WSC_triple_dict = get_WSC_cheap_scores_triples(hdt, forget_triples, alpha, beta)
@@ -305,7 +305,7 @@ def weighted_average_score_triple(triple_list:list, node_scores, edge_scores, w_
     edge_score = 0.0
     for triple in triple_list:
         s, p ,o = get_s_p_o(triple)
-        
+
     node_score = sum(node_scores[node] for node in triple_list)
     edge_score = sum(edge_scores[(triple_list[i], triple_list[i+1])] for i in range(len(triple_list)-1))
     total_score = w_n * node_score + w_e * edge_score
@@ -371,6 +371,14 @@ def check_with_WSC_PPR(G:nx.Graph(),DiG:nx.DiGraph(), rule_list:list, forget_tri
     G.add_edge(s,o)
     return triple_score
 
+def get_all_targets_from_rule_list(rule_list:list):
+    target_list = set()
+    for rule in rule_list:
+        head = rule.split(" <= ")[0]
+        source, _, target = get_s_p_o(head)
+        target_list.add(target)
+    return target_list
+
 def forget_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.3, beta = 0.7, ratio=0.95):
     forget_triples = dict()
     rule_triples = get_all_triples_from_rule_list(rule_list)
@@ -387,9 +395,8 @@ def forget_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.3, bet
         dig.add_edge(pre,obj)
     PPR_dicts = {}
     predicate_dict = get_predicate_degree_centrality(dig)
-    for rule in tqdm(rule_list,desc="building init PPR for each rule"):
-        head = rule.split(" <= ")[0]
-        source, _, target = get_s_p_o(head)
+    target_set = get_all_targets_from_rule_list(rule_list)
+    for target in tqdm(target_set,desc="building init PPR for each target"):
         PPR_dicts[target] = ppr_score(g, target)
     for triple in tqdm(search_space, desc="analysing search space with WSC impact"):
         if triple in rule_triples:
@@ -400,11 +407,11 @@ def forget_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.3, bet
     forget_triple_dict = sorted(forget_triples.items(), key=lambda x: x[1], reverse=True)
     # select top ratio% of the triples
     forget_triples = set([triple for triple, _ in forget_triple_dict[:int(len(forget_triple_dict)*ratio)]])
-    
+
     # triple_score_dict = dict()
     # original_WSC_dict = get_WSC_cheap_scores_rules(hdt, rule_list, [], alpha, beta, rule_alpha, rule_beta)
     # # for rule in rule_list:
-        
+
     # for triple in tqdm(search_space, desc="analysing search space with WSC impact"):
     #     delta_socre = 0.0
     #     forget_WSC_dict = get_WSC_cheap_scores_rules(hdt, rule_list, [triple], alpha, beta, rule_alpha, rule_beta)
@@ -424,13 +431,13 @@ def forget_LM_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.5, 
 
 def reverse_backward_sampling_gt(graph, target, max_hop=3, num_samples=100):
     n_vertices = graph.num_vertices()
-    influence_scores = np.zeros(n_vertices)   
+    influence_scores = np.zeros(n_vertices)
     for _ in range(num_samples):
         current_hop = 0
         current_node = target
         while current_hop < max_hop:
             influence_scores[current_node] += 1
-            predecessors = [v for v in graph.vertex(current_node).in_neighbors()]          
+            predecessors = [v for v in graph.vertex(current_node).in_neighbors()]
             if not predecessors:
                 break
             current_node = random.choice(predecessors).index
@@ -479,7 +486,7 @@ def reverse_backward_sampling_gt_to_dict(graph, target, max_hop=3, num_samples=1
 #         RBS_dict[target] = RBS
 #     RBS_dicts["init"] = RBS_dict
 #     print(RBS_dicts)
-    
+
 #     for triple in tqdm(forget_triples, desc="foreach triple"):
 #         s, p, o = get_s_p_o(triple)
 #         # g.remove_edge(s,o)
