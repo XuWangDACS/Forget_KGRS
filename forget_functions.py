@@ -9,6 +9,7 @@ from tqdm import tqdm
 from extract_rules_from_paths import extract_from_line
 import pickle
 from scipy.sparse import lil_matrix
+import pickle
 # import graph_tool.all as gt_all
 
 predicate_set = {'starring', 'produced_by_producer', 'directed_by', 'edited_by', 'cinematography', 'wrote_by', 'belong_to', 'produced_by_company', 'watched'}
@@ -371,6 +372,35 @@ def check_with_WSC_PPR(G:nx.Graph(),DiG:nx.DiGraph(), rule_list:list, forget_tri
     G.add_edge(s,o)
     return triple_score
 
+def check_with_WSC_PRR_simple(G:nx.Graph(),DiG:nx.DiGraph(), rule_list:list, forget_triple,PPR_dicts:dict, predicate_dict:dict, alpha=0.3, beta = 0.7):
+    w_n = alpha
+    w_e = beta
+    s, p ,o = forget_triple
+    
+    DiG.remove_edge(s,p)
+    DiG.remove_edge(p,o)
+    predicate_dict_new = get_predicate_degree_centrality(DiG)
+    DiG.add_edge(s,p)
+    DiG.add_edge(p,o)
+    triple_score = 0.0
+    for rule in rule_list:
+        head = rule.split(" <= ")[0]
+        source, _, target = get_s_p_o(head)
+        # ppr_new = ppr_score(G, target)
+        body = rule.split(" <= ")[1]
+        body_atoms = body.split(" & ")
+        body_score_old = 0.0
+        body_score_new = 0.0
+        for atom in body_atoms:
+            subject, predicate, object = get_s_p_o(atom)
+            node_score = PPR_dicts[target][subject] + PPR_dicts[target][object]
+            if (PPR_dicts[target][subject] + PPR_dicts[target][object]) == 0.0:
+                continue
+            body_score_old += w_e * predicate_dict[predicate] + w_n * (PPR_dicts[target][subject] + PPR_dicts[target][object])
+            body_score_new += w_e * predicate_dict_new[predicate] + w_n * (PPR_dicts[target][subject] + PPR_dicts[target][object])
+        triple_score += (body_score_new - body_score_old) / (3.0*w_n + 2.0*w_e)
+    return triple_score
+
 def get_all_targets_from_rule_list(rule_list:list):
     target_list = set()
     for rule in rule_list:
@@ -396,13 +426,20 @@ def forget_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.3, bet
     PPR_dicts = {}
     predicate_dict = get_predicate_degree_centrality(dig)
     target_set = get_all_targets_from_rule_list(rule_list)
-    for target in tqdm(target_set,desc="building init PPR for each target"):
-        PPR_dicts[target] = ppr_score(g, target)
+    if os.path.exists("forget_data/PPR_dicts.pickle"):
+        with open("forget_data/PPR_dicts.pickle", "rb") as f:
+            PPR_dicts = pickle.load(f)
+    else:
+        for target in tqdm(target_set,desc="building init PPR for each target"):
+            PPR_dicts[target] = ppr_score(g, target)
+        with open("forget_data/PPR_dicts.pickle", "wb") as f:
+            pickle.dump(PPR_dicts, f)
+    search_space -= rule_triples
     for triple in tqdm(search_space, desc="analysing search space with WSC impact"):
         if triple in rule_triples:
             continue
         # forget_triples[triple] = check_with_WSC(g,dig,rule_list, triple, RBS_dicts, predicate_dict, alpha, beta)
-        forget_triples[triple] = check_with_WSC_PPR(g,dig,rule_list, triple,PPR_dicts, predicate_dict, alpha, beta)
+        forget_triples[triple] = check_with_WSC_PRR_simple(g,dig,rule_list, triple,PPR_dicts, predicate_dict, alpha, beta)
     # sort forget_triples from the highest to the lowest
     forget_triple_dict = sorted(forget_triples.items(), key=lambda x: x[1], reverse=True)
     # select top ratio% of the triples
