@@ -13,19 +13,19 @@ if __name__ == "__main__":
     parser.add_argument('--random_forget_rule', type=bool, default=False, help='randomly forget one rule. (test passive forgetting)')
     parser.add_argument('--random_forget_triple', type=bool, default=False, help='randomly forget one triple. (test passive forgetting)')
     parser.add_argument('--pforget_rule', type=str, default="forget_data/forget_rules.txt", help='path to the file containing passive forgetting rules. (passive forgetting)')
-    
+
     args = parser.parse_args()
-    
+
     print(f"Arguments: {args}")
-    
+
     # assert args.forget_type=="pforget" and os.path.isfile(args.passive_forget), f"{args.passive_forget} is not a valid file path (provide valid forget rules in forget_data/forget_rules.txt)."
     # assert os.path.isfile(args.hdt), f"{args.hdt} is not a valid file path."
-    
+
     hdt = HDTDocument(args.hdt) # Load an HDT file. Missing index file will be generated
     rule_list = parse_rules("pre_data/uid_pid_explanation_exp2.csv")
-    
+
     # pre_compute_everything_for_forget(hdt, rule_list)
-    
+
     # if args.forget_type == "pforget":
     #     search_space = build_pforget_search_space(rule_list)
     #     LM_tirples = forget_LM(rule_list, search_space)
@@ -34,10 +34,9 @@ if __name__ == "__main__":
     #     save_triples(WSC_triples, "forget_data/pforget_WSC_triples.txt")
     # elif args.forget_type == "iforget":
         # forget(hdt, rule_list)
-    
+
     search_space = build_iforget_search_space(hdt)
-    LM_triples = forget_LM(rule_list, search_space)
-    save_triples(LM_triples, "forget_data/iforget_LM_triples.txt")
+    # LM_triples = forget_LM(rule_list, search_space)
+    # save_triples(LM_triples, "forget_data/iforget_LM_triples.txt")
     WSC_triples = forget_WSC(hdt, rule_list, search_space)
     save_triples(WSC_triples, "forget_data/iforget_WSC_triples.txt")
-    

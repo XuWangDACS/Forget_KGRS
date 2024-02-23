@@ -98,11 +98,22 @@ class KnowledgeGraph(object):
     def _add_edge(self, etype1, eid1, relation, etype2, eid2):
         self.G[etype1][eid1][relation].append(eid2)
         self.G[etype2][eid2][relation].append(eid1)
-        
+
     def _remove_edge(self, etype1, eid1, relation, etype2, eid2):
-        if eid2 in self.G[etype1][eid1][relation]:
-            self.G[etype1][eid1][relation].remove(eid2)
-            self.G[etype2][eid2][relation].remove(eid1)
+        if eid2 not in self.G[etype1][eid1][relation]:
+            data1 = self.G[etype1][eid1][relation]
+            data1 = list(data1)
+            data1.remove(eid2)
+            data1 = tuple(data1)
+            data2 = self.G[etype2][eid2][relation]
+            data2 = list(data2)
+            data2.remove(eid1)
+            data2 = tuple(data2)
+            self.G[etype1][eid1][relation] = data1
+            self.G[etype2][eid2][relation] = data2
+        # print('Remove edge: {}-{}-{}-{}'.format(etype1, eid1, relation, eid2))
+        # self.G[etype1][eid1][relation].remove(str(eid2))
+        # self.G[etype2][eid2][relation].remove(eid1)
 
     def _clean(self):
         print('Remove duplicates...')
@@ -248,4 +259,3 @@ def check_test_path(dataset_str, kg):
                 count += len(tmp_path)
             if count == 0:
                 print(uid, pid)
-

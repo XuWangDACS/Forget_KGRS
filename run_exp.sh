@@ -30,3 +30,6 @@ cd ../train_transe_model
 rm -f *
 cd ../../..
 
+echo "---------------------"
+echo "forgetting..."
+python3 forget_main.py

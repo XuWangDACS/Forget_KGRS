@@ -203,7 +203,10 @@ def get_least_model(rule_list:list):
         init_least_model.add(head)
         body = rule.split(" <= ")[1]
         body_atoms = body.split(" & ")
-        init_least_model.update(body_atoms)
+        for atom in body_atoms:
+            s, p, o = get_s_p_o(atom)
+            init_least_model.add((s, p, o))
+        # init_least_model.update(body_atoms)
     return init_least_model
 
 def check_least_model(rule_list:list, least_model:set):
@@ -376,7 +379,7 @@ def check_with_WSC_PRR_simple(G:nx.Graph(),DiG:nx.DiGraph(), rule_list:list, for
     w_n = alpha
     w_e = beta
     s, p ,o = forget_triple
-    
+
     DiG.remove_edge(s,p)
     DiG.remove_edge(p,o)
     predicate_dict_new = get_predicate_degree_centrality(DiG)
@@ -401,6 +404,21 @@ def check_with_WSC_PRR_simple(G:nx.Graph(),DiG:nx.DiGraph(), rule_list:list, for
         triple_score += (body_score_new - body_score_old) / (3.0*w_n + 2.0*w_e)
     return triple_score
 
+def check_triple_importance(target_set,forget_triple,PPR_dicts:dict,node_importance:dict, predicate_dict:dict):
+    alpha = 0.4
+    beta = 0.6
+    damp = 0.1
+    w_edge = 0.3
+    w_node = 0.7
+
+    s, p ,o = forget_triple
+    triple_socre = 0.0
+    for target in target_set:
+        s_score = alpha * node_importance[s] + beta * PPR_dicts[target][s] - damp * (node_importance[s] * PPR_dicts[target][s])
+        o_score = alpha * node_importance[o] + beta * PPR_dicts[target][o] - damp * (node_importance[o] * PPR_dicts[target][o])
+        triple_socre += w_edge * predicate_dict[p] + w_node * (s_score + o_score)
+    return triple_socre
+
 def get_all_targets_from_rule_list(rule_list:list):
     target_list = set()
     for rule in rule_list:
@@ -409,11 +427,12 @@ def get_all_targets_from_rule_list(rule_list:list):
         target_list.add(target)
     return target_list
 
-def forget_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.3, beta = 0.7, ratio=0.95):
+def forget_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.3, beta = 0.7, damp = 0.1, ratio=0.95):
     forget_triples = dict()
     rule_triples = get_all_triples_from_rule_list(rule_list)
     # predicate_graph_dict = construct_graph_dict_from_hdt(hdt)
     g = nx.Graph()
+
     dig = nx.DiGraph()
     triples, _ = hdt.search((None, None, None))
     for s, p, o in triples:
@@ -424,6 +443,13 @@ def forget_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.3, bet
         dig.add_edge(sub,pre)
         dig.add_edge(pre,obj)
     PPR_dicts = {}
+    if os.path.exists("forget_data/node_importance.pickle"):
+        with open("forget_data/node_importance.pickle", "rb") as f:
+            node_importance = pickle.load(f)
+    else:
+        node_importance = nx.eigenvector_centrality(g,max_iter=5000)
+        with open("forget_data/node_importance.pickle", "wb") as f:
+            pickle.dump(node_importance, f)
     predicate_dict = get_predicate_degree_centrality(dig)
     target_set = get_all_targets_from_rule_list(rule_list)
     if os.path.exists("forget_data/PPR_dicts.pickle"):
@@ -434,16 +460,17 @@ def forget_WSC(hdt:HDTDocument, rule_list:list, search_space:set, alpha=0.3, bet
             PPR_dicts[target] = ppr_score(g, target)
         with open("forget_data/PPR_dicts.pickle", "wb") as f:
             pickle.dump(PPR_dicts, f)
-    search_space -= rule_triples
+    # search_space -= rule_triples
     for triple in tqdm(search_space, desc="analysing search space with WSC impact"):
         if triple in rule_triples:
-            continue
+            forget_triples[triple] = 99.0
         # forget_triples[triple] = check_with_WSC(g,dig,rule_list, triple, RBS_dicts, predicate_dict, alpha, beta)
-        forget_triples[triple] = check_with_WSC_PRR_simple(g,dig,rule_list, triple,PPR_dicts, predicate_dict, alpha, beta)
+        # forget_triples[triple] = check_with_WSC_PRR_simple(g,dig,rule_list, triple,PPR_dicts, predicate_dict, alpha, beta)
+        forget_triples[triple] = check_triple_importance(target_set, triple, PPR_dicts, node_importance, predicate_dict)
     # sort forget_triples from the highest to the lowest
-    forget_triple_dict = sorted(forget_triples.items(), key=lambda x: x[1], reverse=True)
+    forget_triple_dict = sorted(forget_triples.items(), key=lambda x: x[1], reverse=False)
     # select top ratio% of the triples
-    forget_triples = set([triple for triple, _ in forget_triple_dict[:int(len(forget_triple_dict)*ratio)]])
+    forget_triples = set([triple for triple, _ in forget_triple_dict[:int(len(forget_triple_dict)*(1.0-ratio))]])
 
     # triple_score_dict = dict()
     # original_WSC_dict = get_WSC_cheap_scores_rules(hdt, rule_list, [], alpha, beta, rule_alpha, rule_beta)
