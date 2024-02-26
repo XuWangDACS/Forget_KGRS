@@ -3,19 +3,19 @@
 echo "Running experiment..."
 echo "---------------------"
 echo "creating KG and train & test labels..."
-python3 preprocess.py
+/home/xu-wang/miniconda3/envs/kdd/bin/python preprocess.py
 echo "---------------------"
 echo "TransE embedding training..."
-python3 train_transe_model.py
+/home/xu-wang/miniconda3/envs/kdd/bin/python train_transe_model.py
 echo "---------------------"
 echo "train agent..."
-python3 train_agent.py
+/home/xu-wang/miniconda3/envs/kdd/bin/python train_agent.py
 echo "---------------------"
 echo "test agent to get predicted paths..."
-python3 test_agent.py
+/home/xu-wang/miniconda3/envs/kdd/bin/python test_agent.py
 echo "---------------------"
 echo "getting results and metrics..."
-python3 main.py --dateset=ml1m --result_dir=original_results
+/home/xu-wang/miniconda3/envs/kdd/bin/python main.py --result_dir=original_results
 echo "---------------------"
 
 echo "Now start forgetting"
@@ -32,4 +32,4 @@ cd ../../..
 
 echo "---------------------"
 echo "forgetting..."
-python3 forget_main.py
+/home/xu-wang/miniconda3/envs/kdd/bin/python forget_main.py

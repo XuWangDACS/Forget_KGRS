@@ -16,14 +16,14 @@ ML1M = 'ml1m'
 LASTFM = 'lastfm'
 # Dataset directories.
 DATASET_DIR = {
-    ML1M: 'datasets/ml1m',
-    LASTFM: 'datasets/lastfm'
+    ML1M: 'datasets',
+    LASTFM: 'datasets'
 }
 
 # Model result directories.
 TMP_DIR = {
-    ML1M: 'tmp/ml1m',
-    LASTFM: 'tmp/lastfm'
+    ML1M: 'datasets',
+    LASTFM: 'datasets'
 }
 
 # Label files.

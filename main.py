@@ -9,7 +9,7 @@ from path_data_loader import PathDataLoader
 if __name__ == '__main__':
     boolean = lambda x: (str(x).lower() == 'true')
     parser = argparse.ArgumentParser()
-    parser.add_argument('--dataset', type=str, default="lastfm", help='One of {ml1m, lastfm}')
+    parser.add_argument('--dataset', type=str, default="ml1m", help='One of {ml1m, lastfm}')
     parser.add_argument('--agent_topk', type=str, default="25-50-1", help='One of {25-50-1, 10-12-1} or more if you compute the predpaths with PGPR')
     parser.add_argument('--opt', type=str, default="LIRopt", help='One of ["softETD", "softSEP", "softLIR", "ETDopt", "SEPopt", "LIRopt", "ETD_SEP_opt", "ETD_LIR_opt", "SEP_LIR_opt", "ETD_SEP_LIR_opt"]')
     parser.add_argument('--alpha', type=float, default=-1, help="Determine the weigth of the optimized explanation metric/s in reranking, -1 means test all alpha from 0. to 1. at step of 0.05")

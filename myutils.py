@@ -20,15 +20,15 @@ KG_COMPLETATION_DATASET_DIR = {
 }
 
 DATASET_DIR = {
-    ML1M: './datasets/ml1m',
-    LASTFM: './datasets/lastfm'
+    ML1M: 'datasets',
+    LASTFM: 'datasets'
 }
 
 LABELS_DIR = {
     ML1M: {
-        "kg": "tmp/ml1m/kg.pkl",
-        "train": "tmp/ml1m/train_label.pkl",
-        "test": "tmp/ml1m/test_label.pkl",
+        "kg": "datasets/kg.pkl",
+        "train": "datasets/train_label.pkl",
+        "test": "datasets/test_label.pkl",
     },
     LASTFM: {
         "kg": "tmp/lastfm/kg.pkl",
