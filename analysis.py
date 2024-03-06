@@ -41,33 +41,26 @@ for opt in opt_dict.keys():
 
 
 for metric in metrics:
-    # 初始化一个空的DataFrame来存储当前指标的所有opt的比较结果
     metric_comparison_df = pd.DataFrame()
 
     for opt in opt_dict.keys():
         df0 = pd.read_csv(f"{folder0}/{opt_dict[opt]}", header=0)
         df1 = pd.read_csv(f"{folder1}/{opt_dict[opt]}", header=0)
         df2 = pd.read_csv(f"{folder2}/{opt_dict[opt]}", header=0)
-
-        # 筛选出各个数据集中metric为当前指标且group为'Overall'的行
         df_metric0 = df0[(df0["metric"] == metric) & (df0["group"] == 'Overall')][['alpha', 'data']].rename(columns={'data': f'{opt}_Original'})
         df_metric1 = df1[(df1["metric"] == metric) & (df1["group"] == 'Overall')][['alpha', 'data']].rename(columns={'data': f'{opt}_LM'})
         df_metric2 = df2[(df2["metric"] == metric) & (df2["group"] == 'Overall')][['alpha', 'data']].rename(columns={'data': f'{opt}_WSC'})
-
-        # 合并这三个DataFrame
         if metric_comparison_df.empty:
             metric_comparison_df = df_metric0.merge(df_metric1, on='alpha').merge(df_metric2, on='alpha')
         else:
             merged_df = df_metric0.merge(df_metric1, on='alpha').merge(df_metric2, on='alpha')
             metric_comparison_df = metric_comparison_df.merge(merged_df, on='alpha', how='outer')
-    cols_to_format = metric_comparison_df.columns.drop('alpha')  # 除去'alpha'列
+    cols_to_format = metric_comparison_df.columns.drop('alpha')
     metric_comparison_df[cols_to_format] = metric_comparison_df[cols_to_format].applymap(lambda x: f"{x:.4f}")
-    # 重置索引
     metric_comparison_df.reset_index(drop=True, inplace=True)
     metric_comparison_df.to_csv(f'results_table/comparison_{metric}.csv', index=False)
 
 for metric in metrics:
-    # 初始化一个空的DataFrame来存储当前指标的所有opt的比较结果
     metric_comparison_df = pd.DataFrame()
 
     for opt in opt_dict.keys():
@@ -75,29 +68,23 @@ for metric in metrics:
         df1 = pd.read_csv(f"{folder1}/{opt_dict[opt]}", header=0)
         df2 = pd.read_csv(f"{folder2}/{opt_dict[opt]}", header=0)
 
-        # 筛选出各个数据集中metric为当前指标且group为'Overall'的行
         df_metric0 = df0[(df0["metric"] == metric) & (df0["group"] == 'Overall')][['alpha', 'data']].rename(columns={'data': f'{opt}_Original'})
         df_metric1 = df1[(df1["metric"] == metric) & (df1["group"] == 'Overall')][['alpha', 'data']].rename(columns={'data': f'{opt}_LM'})
         df_metric2 = df2[(df2["metric"] == metric) & (df2["group"] == 'Overall')][['alpha', 'data']].rename(columns={'data': f'{opt}_WSC'})
 
-        # 合并这三个DataFrame
         merged_df = df_metric0.merge(df_metric1, on='alpha').merge(df_metric2, on='alpha')
 
-        # 将Original设置为100%，并将LM和WSC的数据转换为相对于Original的百分比
         merged_df[f'{opt}_LM'] = ((merged_df[f'{opt}_LM'] / merged_df[f'{opt}_Original']) * 100).round(2)
         merged_df[f'{opt}_WSC'] = ((merged_df[f'{opt}_WSC'] / merged_df[f'{opt}_Original']) * 100).round(2)
-        merged_df[f'{opt}_Original'] = 100  # 将Original数据设置为100%
+        merged_df[f'{opt}_Original'] = 100
 
-        # 合并到总的比较结果DataFrame中
         if metric_comparison_df.empty:
             metric_comparison_df = merged_df
         else:
             metric_comparison_df = metric_comparison_df.merge(merged_df, on='alpha', how='outer')
 
-    # 重置索引
     metric_comparison_df.reset_index(drop=True, inplace=True)
 
-    # 保存当前指标的对比表格为CSV文件
     metric_comparison_df.to_csv(f'results_table/{metric}_comparison_percentage.csv', index=False)
     with open("results_table/latex.txt", 'a+') as f:
         f.write(f"\\subsection*{{{metric}}}\n")
@@ -105,7 +92,6 @@ for metric in metrics:
         f.write("\n")
 
 for metric in metrics:
-    # 初始化一个空的DataFrame来存储当前指标的所有opt的比较结果
     metric_comparison_df = pd.DataFrame()
 
     for opt in opt_dict.keys():
@@ -113,30 +99,23 @@ for metric in metrics:
         df1 = pd.read_csv(f"{folder1}/{opt_dict[opt]}", header=0)
         df2 = pd.read_csv(f"{folder2}/{opt_dict[opt]}", header=0)
 
-        # 筛选出各个数据集中metric为当前指标且group为'Overall'的行
         df_metric0 = df0[(df0["metric"] == metric) & (df0["group"] == 'Overall')][['alpha', 'data']].rename(columns={'data': f'{opt}_Original'})
         df_metric1 = df1[(df1["metric"] == metric) & (df1["group"] == 'Overall')][['alpha', 'data']].rename(columns={'data': f'{opt}_LM'})
         df_metric2 = df2[(df2["metric"] == metric) & (df2["group"] == 'Overall')][['alpha', 'data']].rename(columns={'data': f'{opt}_WSC'})
 
-        # 合并这三个DataFrame
         merged_df = df_metric0.merge(df_metric1, on='alpha').merge(df_metric2, on='alpha')
 
-        # 将Original设置为100%，并将LM和WSC的数据转换为相对于Original的百分比
         merged_df[f'{opt}_LM'] = ((merged_df[f'{opt}_LM'] / merged_df[f'{opt}_Original']) * 100).round(2) -100
         merged_df[f'{opt}_WSC'] = ((merged_df[f'{opt}_WSC'] / merged_df[f'{opt}_Original']) * 100).round(2) -100
-        merged_df[f'{opt}_Original'] = 100  # 将Original数据设置为100%
-        # merged_df = merged_df.drop(columns=[f'{opt}_Original'])
+        merged_df[f'{opt}_Original'] = 100
 
-        # 合并到总的比较结果DataFrame中
         if metric_comparison_df.empty:
             metric_comparison_df = merged_df
         else:
             metric_comparison_df = metric_comparison_df.merge(merged_df, on='alpha', how='outer')
 
-    # 重置索引
     metric_comparison_df.reset_index(drop=True, inplace=True)
 
-    # 保存当前指标的对比表格为CSV文件
     metric_comparison_df.to_csv(f'results_table/{metric}_comparison_percentage.csv', index=False)
     with open("results_table/latex.txt", 'a+') as f:
         f.write(f"\\subsection*{{{metric}}}\n")

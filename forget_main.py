@@ -9,7 +9,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--hdt', type=str, default="forget_data/KnowlegeGraph.hdt", help='HDT file path.')
     parser.add_argument('--rule', type=str, default="pre_data/uid_pid_explanation_exp2.csv", help='Path to the file containing passive forgetting rules.')
-    parser.add_argument('--forget_type', type=str, default="pforget", help='Type of forgetting (pforget or iforget, represent passive forget or intentional forget).')
+    parser.add_argument('--forget_type', type=str, default="iforget", help='Type of forgetting (pforget or iforget, represent passive forget or intentional forget).')
     parser.add_argument('--random_forget_rule', type=bool, default=False, help='randomly forget one rule. (test passive forgetting)')
     parser.add_argument('--random_forget_triple', type=bool, default=False, help='randomly forget one triple. (test passive forgetting)')
     parser.add_argument('--pforget_rule', type=str, default="forget_data/forget_rules.txt", help='path to the file containing passive forgetting rules. (passive forgetting)')
@@ -36,7 +36,7 @@ if __name__ == "__main__":
         # forget(hdt, rule_list)
 
     search_space = build_iforget_search_space(hdt)
-    # LM_triples = forget_LM(rule_list, search_space)
-    # save_triples(LM_triples, "forget_data/iforget_LM_triples.txt")
+    LM_triples = forget_LM(rule_list, search_space)
+    save_triples(LM_triples, "forget_data/iforget_LM_triples.txt")
     WSC_triples = forget_WSC(hdt, rule_list, search_space)
     save_triples(WSC_triples, "forget_data/iforget_WSC_triples.txt")
