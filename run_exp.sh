@@ -1,26 +1,15 @@
 #!/bin/sh
 
-echo "Running experiment..."
-echo "---------------------"
-echo "creating KG and train & test labels..."
-/home/xu-wang/miniconda3/envs/kdd/bin/python preprocess.py
-echo "---------------------"
-echo "TransE embedding training..."
-/home/xu-wang/miniconda3/envs/kdd/bin/python train_transe_model.py
-echo "---------------------"
-echo "train agent..."
-/home/xu-wang/miniconda3/envs/kdd/bin/python train_agent.py
-echo "---------------------"
-echo "test agent to get predicted paths..."
-/home/xu-wang/miniconda3/envs/kdd/bin/python test_agent.py
-echo "---------------------"
-echo "getting results and metrics..."
-/home/xu-wang/miniconda3/envs/kdd/bin/python main.py --result_dir=original_results
+echo "Running original experiment..."
+python preprocess.py
+python train_transe_model.py
+python train_agent.py
+python test_agent.py
+python main.py --result_dir=original_results
+echo "Results stored in original_results"
 echo "---------------------"
 
-echo "Now start forgetting"
-echo "---------------------"
-echo "cleaning agent and transe model..."
+echo "cleaning temporary files..."
 mv tmp/ml1m/train_agent tmp/ml1m/train_agent_original
 cd tmp/ml1m/train_agent
 rm -f *
@@ -32,4 +21,47 @@ cd ../../..
 
 echo "---------------------"
 echo "forgetting..."
-/home/xu-wang/miniconda3/envs/kdd/bin/python forget_main.py
+python forget_main.py
+echo "Forget triples stored in forget_data/iforget_LM_triples.txt and forget_data/iforget_WSC_triples.txt"
+
+echo "---------------------"
+echo "rebuild knowledge graph and re-experiment... (Least Model forgetting)"
+python Forget_rebuildKG.py --path=forget_data/iforget_LM_triples.txt
+python train_transe_model.py
+python train_agent.py
+python test_agent.py
+python main.py --result_dir=iforget_LM_results
+echo "Results stored in iforget_LM_results"
+
+echo "---------------------"
+echo "cleaning temporary files..."
+mv tmp/ml1m/train_agent tmp/ml1m/train_agent_original
+cd tmp/ml1m/train_agent
+rm -f *
+cd ..
+mv train_transe_model train_transe_model_original
+cd ../train_transe_model
+rm -f *
+cd ../../..
+
+echo "---------------------"
+echo "rebuild knowledge graph and re-experiment... (Weakest Sufficient Condition forgetting)"
+python Forget_rebuildKG.py --path=forget_data/iforget_WSC_triples.txt
+python train_transe_model.py
+python train_agent.py
+python test_agent.py
+python main.py --result_dir=iforget_WSC_results
+echo "Results stored in iforget_WSC_results"
+
+echo "---------------------"
+echo "cleaning temporary files..."
+mv tmp/ml1m/train_agent tmp/ml1m/train_agent_original
+cd tmp/ml1m/train_agent
+rm -f *
+cd ..
+mv train_transe_model train_transe_model_original
+cd ../train_transe_model
+rm -f *
+cd ../../..
+
+echo "Done!"
