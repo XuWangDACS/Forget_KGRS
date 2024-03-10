@@ -10,14 +10,12 @@ echo "Results stored in original_results"
 echo "---------------------"
 
 echo "cleaning temporary files..."
-mv tmp/ml1m/train_agent tmp/ml1m/train_agent_original
-cd tmp/ml1m/train_agent
+cd datasets/train_agent
 rm -f *
-cd ..
-mv train_transe_model train_transe_model_original
-cd ../train_transe_model
+cd ../..
+cd datasets/train_transe_model
 rm -f *
-cd ../../..
+cd ../..
 
 echo "---------------------"
 echo "forgetting..."
@@ -35,14 +33,12 @@ echo "Results stored in iforget_LM_results"
 
 echo "---------------------"
 echo "cleaning temporary files..."
-mv tmp/ml1m/train_agent tmp/ml1m/train_agent_original
-cd tmp/ml1m/train_agent
+cd datasets/train_agent
 rm -f *
-cd ..
-mv train_transe_model train_transe_model_original
-cd ../train_transe_model
+cd ../..
+cd datasets/train_transe_model
 rm -f *
-cd ../../..
+cd ../..
 
 echo "---------------------"
 echo "rebuild knowledge graph and re-experiment... (Weakest Sufficient Condition forgetting)"
@@ -55,13 +51,11 @@ echo "Results stored in iforget_WSC_results"
 
 echo "---------------------"
 echo "cleaning temporary files..."
-mv tmp/ml1m/train_agent tmp/ml1m/train_agent_original
-cd tmp/ml1m/train_agent
+cd datasets/train_agent
 rm -f *
-cd ..
-mv train_transe_model train_transe_model_original
-cd ../train_transe_model
+cd ../..
+cd datasets/train_transe_model
 rm -f *
-cd ../../..
+cd ../..
 
 echo "Done!"
